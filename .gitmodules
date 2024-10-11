@@ -1,0 +1,8 @@
+[submodule "bsuite"]
+	path = bsuite
+	url = https://github.com/steamraven/bsuite.git
+	branch = python_314
+[submodule "LightZero"]
+	path = LightZero
+	url = https://github.com/opendilab/LightZero.git
+	branch = main
