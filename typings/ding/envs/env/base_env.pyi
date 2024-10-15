@@ -11,7 +11,7 @@ class BaseEnvTimestep(NamedTuple):
     obs: Any
     reward: float
     done: bool
-    info: dict[Any, Any]
+    info: dict[str, Any]
 
 class FinalMeta(type(ABC), type(gym.Env)):
     ...
