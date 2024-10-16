@@ -142,6 +142,9 @@ class Player:
     tomes: int
     score: int
 
+    overlap: Coordinate | None
+
+
 # Colors
 # TODO: Refactor name to how they are used rather than color
 WHITE = (255,255,255)
@@ -496,8 +499,8 @@ class MythicMischiefEnv(PlayableEnv):
 
     # hack to calc maxinum sizes
     MAX_PLAYERS = [
-        Player(1,VAMPIRE, set(), 9,3, 3,4, 3,4, 3,4, 1,1,4,9),
-        Player(1,MONSTER, set(), 9,3, 3,4, 3,4, 3,4, 1,1,4,9),
+        Player(1, VAMPIRE, set(), 9, 3, 3, 4, 3, 4, 3, 4, 1, 1, 4, 9, None),
+        Player(1, MONSTER, set(), 9, 3, 3, 4, 3, 4, 3, 4, 1, 1, 4, 9, None),
     ]
     def attr_box(self, player_id: int, color: tuple[int,int,int], getter: Callable[[Player], str], action: Optional[int] = None):
         """Define a GUI for a single player attribute. Also handles background highlight for actions"""
@@ -561,12 +564,11 @@ class MythicMischiefEnv(PlayableEnv):
         # Player initialization
         # TODO: Randomize player teams
         self.players = (
-            Player(0, VAMPIRE, set(), 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0),
-            Player(1, MONSTER, set(), 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0) 
+            Player(0, VAMPIRE, set(), 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, None),
+            Player(1, MONSTER, set(), 3, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, None),
         )
         # second player gets an extra tome to start
         self.players[1].tomes += 1
-
 
         # test data
         if False:
@@ -747,124 +749,193 @@ class MythicMischiefEnv(PlayableEnv):
         # TODO: all skills/abilities
         while True:
 
-            available:list[int] = [Action.PASS]
+            available: list[int] = [Action.PASS]
 
-            if self.can_move(player):
-                available.append(Action.MOVE)
-            #if self.can_move_other(player):
+            if player.overlap:
+                # Cannot stop movement on another players space.  Or activate other actins
+                yield from self.do_move(player)
+                continue
+
+            do_move = self.do_move(player)
+            available.extend(next(do_move).available_actions)
+            # if self.can_move_other(player):
             #    available.append(Action.MOVE_OTHER)
-            #if self.can_move_shelf(player, horz = True):
+            # if self.can_move_shelf(player, horz = True):
             #    available.append(Action.MOVE_HORZ_SHELF)
-            #if self.can_move_shelf(player, horz = False):
+            # if self.can_move_shelf(player, horz = False):
             #    available.append(Action.MOVE_VERT_SHELF)
-            if self.can_distract(player):
-                available.append(Action.DISTRACT)
-            
+            do_distract = self.do_distract(player)
+            available.extend(next(do_distract).available_actions)
 
-            action = yield PlayYield (
-                player.id_,ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, available
+            action = yield PlayYield(
+                player.id_, ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, available
             )
 
             if action == Action.MOVE:
-                done, reward = yield from self.do_move(player)
-                if done:
-                    return done, reward
+                yield from do_move
             elif action == Action.DISTRACT:
-                done, reward = yield from self.do_distract(player)
+                done, reward = yield from do_distract
                 if done:
                     return done, reward
             elif action == Action.PASS:
                 return False, 0
 
-        return False, 0
+    def do_move(self, player: Player) -> PlayGenerator:
 
-    def can_move(self, player: Player) -> bool:
-        return player.move > 0
+        player_mask = PLAYER[player.id_]
+        other_player_mask = PLAYER[player.id_ ^ 1]
+        other_player = self.players[player.id_ ^ 1]
+        not_available_mask = KEEPER | player_mask
 
-    def do_move(self, player: Player) -> PlayDoneGenerator:
+        def find_available_moves(
+            x: int, y: int, remaining: int
+        ) -> list[tuple[Coordinate, int]]:
+            available = list[tuple[Coordinate, int]]()
 
-        # Select mytmic to move
-        available = [board_to_action(x,y) for x,y in player.mythics]
+            def inner(x_: int, y_: int):
+                if self.board[x_, y_] & not_available_mask:
+                    return
+                cost = 2 if self.board[x_, y_] & CLUTTER else 1
+                if self.board[x_, y_] & other_player_mask:
+                    cost += min(
+                        a[1] for a in find_available_moves(x_, y_, remaining - cost)
+                    )
+                if remaining >= cost:
+                    available.append(((x_, y_), cost))
+
+            if y < 4 and not (self.board[x, y] & HORZ_WALL):
+                inner(x, y + 1)
+            if x < 4 and not (self.board[x, y] & VERT_WALL):
+                inner(x + 1, y)
+            if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+                inner(x, y - 1)
+            if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+                inner(x - 1, y)
+            return available
+
+        available_moves = dict[Coordinate, list[tuple[Coordinate, int]]]()
+
+        if player.overlap:
+            mythics = [player.overlap]
+            assert player.move
+        else:
+            mythics = player.mythics
+
+        if player.move:
+            for mythic in mythics:
+                self.board[mythic] ^= player_mask
+                available_moves[mythic] = find_available_moves(*mythic, player.move)
+                self.board[mythic] |= player_mask
+
+        # overlap = player.mythics & other_player.mythics
+
+        # def check_move(move: Coordinate, cost: int):
+        #     """Simulate a move and Test if a is valid. Mainly that ALL overlaps still have moves"""
+        #     # Second have of mythic move: Add to new position
+        #     self.board[move] |= player_mask
+        #     remaining = player.move - cost
+        #     try:
+        #         for o_mythic in overlap:
+        #             # Don't test against self
+        #             if mythic == o_mythic:
+        #                 continue
+
+        #             # Remove the overlap mythic to find available moves
+        #             self.board[o_mythic] ^= player_mask
+        #             try:
+        #                 # if no available moves for the overlap, this move is invalid
+        #                 if not find_available_moves(*o_mythic, remaining):
+        #                     return False
+        #             finally:
+        #                 # Reverse removal of overlap mythic
+        #                 self.board[o_mythic] |= player_mask
+        #     finally:
+        #         # Make sure to reverse reverse move
+        #         self.board[move] ^= player_mask
+        #     return True
+
+        # # Test if all overlaps are still valid after each available move
+        # if overlap:
+        #     for mythic,available in available_moves.items():
+        #         # Move the mythic. Start by removing from current position
+        #         self.board[mythic] ^= player_mask
+
+        #         available_moves[mythic] = [move for move in available if check_move(*move)]
+
+        #         # Make sure to reverse move
+        #         self.board[mythic] |= player_mask
+
+        if any(v for v in available_moves.values()):
+            yield PlayYield(
+                player.id_, ActionPhase.MOVE, 1, ActionType.SELECT_SKILL, [Action.MOVE]
+            )
+        else:
+            yield PlayYield(
+                player.id_, ActionPhase.MOVE, 1, ActionType.SELECT_SKILL, []
+            )
+
+        # Select mythic to move
+        # available = [board_to_action(x,y) for x,y in player.mythics]
 
         action = yield PlayYield(
             player.id_,
             ActionPhase.MOVE,
             2,
             ActionType.SELECT_SELF,
-            available
+            [board_to_action(*k) for k, v in available_moves.items() if v],
         )
 
-        # Move Mythic
+        # Mythic Selected to move
 
-        def available_moves (x: int, y: int, return_cost: int) -> list[tuple[Coordinate,int]]:
+        mythic = action_to_board(action)
 
-            available = list[tuple[Coordinate, int]]()
-
-            #TODO: allow mythics to move through oppenents
-            mask = KEEPER | PLAYER[player.id_]
-            def inner(x:int, y:int):
-                if not (self.board[x,y] &  mask):
-                    if (self.board[x,y] & CLUTTER):
-                        c = 2
-                    else:
-                        c = 1
-
-                    # Move through other player
-                    if self.board[x,y] & PLAYER[player.id_ ^ 1]:
-                        other_availible = available_moves(x,y, c)
-
-                        c += min(c+return_cost, min(a[1] for a in other_availible))
-
-                    available.append(((x,y), c))
-
-            if y < 4 and not (self.board[x,y] & HORZ_WALL):
-                inner(x,y+1)
-            if x < 4 and not (self.board[x,y] & VERT_WALL):
-                inner(x+1,y)
-            if y > 0 and not (self.board[x,y-1] & HORZ_WALL):
-                inner(x,y-1) 
-            if x>0 and not (self.board[x-1,y] & VERT_WALL):
-                inner(x-1,y) 
-            return available
-
-        x,y = action_to_board(action)
-        available = list(board_to_action(*a[0]) for a in available_moves(x,y,0) if a[1] <= player.move)
+        available = available_moves[mythic]
 
         if not available:
             # TODO: Should not reach; change can_move to handle this
-            return False, 0
+            return
 
         action = yield PlayYield(
             player.id_,
             ActionPhase.MOVE,
             1,
             ActionType.SELECT_DEST,
-            available
+            [board_to_action(*a[0]) for a in available],
         )
 
+        # Destination chosen
 
-        # Move mythic
-        self.board[x,y] ^= PLAYER[player.id_]
-        player.mythics.remove((x,y))
-        x,y = action_to_board(action)
-        self.board[x,y] |= PLAYER[player.id_]
-        player.mythics.add((x,y))
-        if self.board[x,y] & CLUTTER:
-            player.move -= 2
+        # Actually Move mythic
+        self.board[mythic] ^= PLAYER[player.id_]
+        player.mythics.remove(mythic)
+        mythic = action_to_board(action)
+
+        if self.board[mythic] & CLUTTER:
+            cost = 2
         else:
-            player.move -= 1
+            cost = 1
+
+        player.move -= cost
+        self.board[mythic] |= PLAYER[player.id_]
+        player.mythics.add(mythic)
 
         # check for book
-        if self.board[x,y] & BOOKS[player.id_]:
-            self.board[x,y] ^= BOOKS[player.id_]
+        if self.board[mythic] & BOOKS[player.id_]:
+            self.board[mythic] ^= BOOKS[player.id_]
             player.tomes += 1
 
-        return False, 0
-    
-    def can_distract(self, player:Player) -> bool:
-        return player.distract > 0
-    
-    def do_distract(self, player: Player) -> PlayDoneGenerator:
+        player.overlap = mythic if self.board[mythic] & other_player else None
+
+        return
+
+    def do_distract(self, player: Player) -> PlayOrDoneGenerator:
+        yield PlayYield(
+            player.id_,
+            ActionPhase.MOVE,
+            1,
+            ActionType.SELECT_SKILL,
+            [Action.MOVE] if player.distract > 0 else [],
+        )
 
         # Select mythic to perform distract
         available = [board_to_action(x,y) for x,y in player.mythics]
