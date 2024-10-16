@@ -354,10 +354,124 @@ class MythicMischiefEnv(PlayableEnv):
 
     def game_board(self) -> "Renderable":
         """Create the main game board GUI"""
-        # TODO: Refactor Mythic specials out of grid, like player_board
-        return Grid(self.font, self)
-    
-    def player_board(self, player_id:int) -> "Box":
+        game = self
+        board = game.board
+
+        # Size grid according to size of Monospaced characters
+        char_size = (
+            self.font.get_rect(PLAYER_ICON).right,
+            self.font.get_sized_height(0),
+        )
+
+        # useed for highlighting grid: Avaliable Action, and Action to Confirm
+        # Only for board actions
+        available_actions = [action_to_board(a) for a in game.available_actions if a>=len(Action)]
+        if game.confirming_action and game.confirming_action >= len(Action):
+            confirming_action = action_to_board(game.confirming_action)
+        else:
+            confirming_action = None
+
+        class GameGrid(Grid):
+            "Override Grid for specific logic"
+            
+            def bg(self, x: int, y: int):
+                if (x, y) == confirming_action:
+                    return GREEN
+                if (x, y) in available_actions:
+                    return GRAY
+                return BLACK
+
+            def border(self, x: int, y: int) -> BorderDef:
+                # Render walls as borders
+                data: np.uint16 = board[x, y]
+                return (
+                    BorderProps(YELLOW, 3) if data & HORZ_WALL else None,
+                    BorderProps(YELLOW, 3) if data & VERT_WALL else None,
+                )
+
+            def render_cell(
+                self, x: int, y: int, surface: Surface, bg: tuple[int, int, int]
+            ):
+                data: np.uint16 = board[x, y]
+
+                # Rect is moved around
+                char_rect = pygame.Rect(0, 0, char_size[0], char_size[1])
+
+                # Mythic/Keeper
+                if data & KEEPER:
+                    self.font.render_to(surface, char_rect, KEEPER_ICON, YELLOW, bg)
+                elif data & PLAYER_MASK:
+                    if not (data & PLAYER[0]):
+                        color = BLUE
+                    elif not (data & PLAYER[1]):
+                        color = RED
+                    else:
+                        color = RED if g_blink else BLUE
+                    self.font.render_to(surface, char_rect, PLAYER_ICON, color, bg)
+
+                # Books
+                if data & BOOKS_MASK:
+                    if not (data & BOOKS[0]):
+                        color = BLUE
+                    elif not (data & BOOKS[1]):
+                        color = RED
+                    else:
+                        color = RED if g_blink else BLUE
+                    self.font.render_to(
+                        surface,
+                        char_rect.move((char_size[0] * 2, 0)),
+                        BOOK_ICON,
+                        color,
+                        bg,
+                    )
+
+                # Next Line
+                char_rect.move_ip(0, char_size[1])
+                # Clutter
+                if data & CLUTTER:
+                    self.font.render_to(surface, char_rect, CLUTTER_ICON, WHITE, bg)
+
+                # Respawn
+                if data & RESPAWN:
+                    self.font.render_to(
+                        surface,
+                        char_rect.move((char_size[0] * 2, 0)),
+                        RESPAWN_ICON,
+                        WHITE,
+                        bg,
+                    )
+
+                # Next Line
+                char_rect.move_ip(0, char_size[1])
+
+                # Keeper Dest
+                if data & DEST_MASK:
+                    for dest_no, dest in enumerate(DEST):
+                        if data & dest:
+                            self.font.render_to(
+                                surface, char_rect, str(dest_no + 1), YELLOW, bg
+                            )
+
+                # Player special
+                if data & PLAYER_SPECIAL_MASK:
+
+                    if not (data & PLAYER_SPECIAL[0]):
+                        color = BLUE
+                    elif not (data & PLAYER_SPECIAL[1]):
+                        color = RED
+                    else:
+                        color = RED if g_blink else BLUE
+                    self.font.render_to(
+                        surface,
+                        char_rect.move((char_size[0] * 2, 0)),
+                        PLAYER_SPECIAL_ICON,
+                        color,
+                        bg,
+                    )
+                # self.font.render_to(surface, char_rect.move((self.char_size[0]*2, 0)), str(self.game.dest_costs[x,y]), WHITE, bg)
+
+        return GameGrid(self.font, (5, 5), (char_size[0] * 3, char_size[1] * 3))
+
         """Create a GUI for a player"""
 
         if player_id == 0:
@@ -1046,155 +1160,118 @@ CLUTTER_ICON = "X"
 RESPAWN_ICON = "↺"
 PLAYER_SPECIAL_ICON = "*"
 
+
+@dataclass
+class BorderProps:
+    color: tuple[int, int, int]
+    width: int
+
+
+BorderDef = tuple[Optional[BorderProps], Optional[BorderProps]]
+
+
 class Grid(Renderable):
     """Grid of items"""
-    # TODO: Refactor Env/Game elements out
-    def __init__(self,font: pygame.freetype.Font, game: MythicMischiefEnv):
+
+    def __init__(
+        self,
+        font: pygame.freetype.Font,
+        size: tuple[int, int],
+        cell_size: tuple[int, int],   # Cell size without padding
+    ):
         self.font = font
-        self.game = game
+        self.cell_size = cell_size
+        self._size = size
         self.pad = 5
+
+    def cell_bg(self, x: int, y: int) -> tuple[int, int, int]:
+        """Background of cell"""
+        return BLACK
+
+    def cell_border(self, x: int, y: int) -> BorderDef:
+        """Calculate dynamic border of cell"""
+        return (None, None)
+
+    def render_cell(self, x: int, y: int, surface: Surface, bg: tuple[int, int, int]):
+        """Render a cell on given surface (without padding)"""
+        pass
+
     def render(self, surface: Surface):
-        size = self.grid_size
+        """Render grid and each cell in its own subsurface"""
+        size = self.size()
         pad = self.pad
-        cell_width = self.char_size[0]*3 + pad + pad
-        cell_height = self.char_size[1]*3 + pad + pad
+        cell_width = self.cell_size[0] + pad + pad
+        cell_height = self.cell_size[1] + pad + pad
 
         x_start = pad
         y_start = pad
+
+        # Grid backgrounds
+        # Draw background highlight first
+        for x in range(self._size[0]):
+            x_pos = x_start + cell_width * x
+            for y in range(self._size[1]):
+                y_pos = y_start + cell_height * y
+                bg = self.cell_bg(x, y)
+                if bg != BLACK:
+                    pygame.draw.rect(
+                        surface, bg, pygame.Rect(x_pos, y_pos, cell_width, cell_height)
+                    )
+        # Grid lines
         x_end = size[0] - pad
         y_end = size[1] - pad
 
-
-        # Grid backgrounds
         x_pos = x_start
-        y_pos = y_start
-        available_actions = [action_to_board(a) for a in self.game.available_actions]
-        if self.game.confirming_action and self.game.confirming_action >= len(Action):
-            confirming_action = action_to_board(self.game.confirming_action)
-        else:
-            confirming_action = None
-
-        # Draw background highlight first
-        # TODO: Handle wall highlight
-        for x in range(5):
-            for y in range(5):
-                bg = (GREEN if (x,y) == confirming_action else 
-                      GRAY if (x,y) in available_actions else 
-                      BLACK)
-                if bg != BLACK:
-                    pygame.draw.rect(surface, bg, pygame.Rect(x_pos + cell_width*x, 
-                                                              y_pos + cell_height*y,
-                                                              cell_width,
-                                                              cell_height
-                                                              ))                    
-        # Grid lines
-        x_pos = x_start
-        y_pos = y_start
-
-        for _ in range(6):
-            pygame.draw.line(surface, WHITE,
-                             (x_start, y_pos),
-                             (x_end, y_pos))
-            pygame.draw.line(surface, WHITE,
-                             (x_pos, y_start),
-                             (x_pos, y_end))
+        for _ in range(self._size[0] + 1):
+            pygame.draw.line(surface, WHITE, (x_pos, y_start), (x_pos, y_end))
             x_pos += cell_width
-            y_pos += cell_height                    
+
+        y_pos = y_start
+        for _ in range(self._size[1] + 1):
+            pygame.draw.line(surface, WHITE, (x_start, y_pos), (x_end, y_pos))
+            y_pos += cell_height
 
         # grid contents
-        x_pos = x_start
-        y_pos = y_start
 
-        board = self.game.board
-        for x in range(5):
-            for y in range(5):
-                data: np.uint16 = board[x,y]
-                bg = (GREEN if (x,y) == confirming_action else 
-                      GRAY if (x,y) in available_actions else 
-                      BLACK)
+        for x in range(self._size[0]):
+            x_pos = x_start + cell_width * x
+            for y in range(self._size[1]):
+                y_pos = x_start + cell_width * y
 
-                # Walls
-                if data & HORZ_WALL:
-                    pygame.draw.line(surface, YELLOW, 
-                                     (x_pos + cell_width*x, y_pos  + cell_height*y + cell_height),   
-                                     (x_pos + cell_width*x+cell_width, y_pos  + cell_height*y + cell_height),
-                                     width=3)
+                # Borders
+                border_def = self.cell_border(x, y)
 
-                if data & VERT_WALL:
-                    pygame.draw.line(surface, YELLOW, 
-                                     (x_pos + cell_width*x+cell_width, y_pos  + cell_height*y ),   
-                                     (x_pos + cell_width*x+cell_width, y_pos  + cell_height*y + cell_height),
-                                     width=3)
+                start_border = (x_pos, y_pos + cell_height)
 
-                # Rect is moved around
-                char_rect = pygame.Rect(x_pos + pad + cell_width*x, y_pos + pad + cell_height*y, 
-                                        self.char_size[0], self.char_size[1])
-                
-                # Mythic/Keeper
-                if data & KEEPER:
-                    self.font.render_to(surface, char_rect, KEEPER_ICON, YELLOW, bg)
-                elif data & PLAYER_MASK:
-                    if not (data & PLAYER[0]):
-                        color = BLUE
-                    elif not (data & PLAYER[1]):
-                        color = RED
-                    else:
-                        color = RED if g_blink else BLUE
-                    self.font.render_to(surface, char_rect, PLAYER_ICON, color, bg)
+                for prop in border_def:
+                    if prop:
+                        pygame.draw.line(
+                            surface,
+                            prop.color,
+                            start_border,
+                            (x_pos + cell_width, y_pos + cell_height),
+                            width=prop.width,
+                        )
 
-                # Books
-                if data & BOOKS_MASK:
-                    if not (data & BOOKS[0]):
-                        color = BLUE
-                    elif not (data & BOOKS[1]):
-                        color = RED
-                    else:
-                        color = RED if g_blink else BLUE
-                    self.font.render_to(surface, char_rect.move((self.char_size[0]*2, 0)), BOOK_ICON, color, bg)
-                
+                    start_border = (x_pos + cell_width, y_pos)
 
-                # Next Line
-                char_rect.move_ip(0, self.char_size[1])
-                
-                # Clutter
-                if data & CLUTTER:
-                    self.font.render_to(surface, char_rect, CLUTTER_ICON, WHITE, bg)
-                
-                # Respawn
-                if data & RESPAWN:
-                    self.font.render_to(surface, char_rect.move((self.char_size[0]*2, 0)), RESPAWN_ICON, WHITE, bg)
-                
-                # Next Line
-                char_rect.move_ip(0, self.char_size[1])
+                # Render contents
+                rect = pygame.Rect(
+                    x_pos + pad, y_pos + pad, self.cell_size[0], self.cell_size[1]
+                )
+                bg = self.cell_bg(x, y)
 
-                # Keeper Dest
-                if data & DEST_MASK:
-                    for dest_no, dest in enumerate(DEST):
-                        if data & dest:
-                            self.font.render_to(surface, char_rect, str(dest_no+1), YELLOW, bg)
-
-                # Player special
-                if data & PLAYER_SPECIAL_MASK:
-
-                    if not (data & PLAYER_SPECIAL[0]):
-                        color = BLUE
-                    elif not (data & PLAYER_SPECIAL[1]):
-                        color = RED
-                    else:
-                        color = RED if g_blink else BLUE
-                    self.font.render_to(surface, char_rect.move((self.char_size[0]*2, 0)), PLAYER_SPECIAL_ICON, color, bg)
-                #self.font.render_to(surface, char_rect.move((self.char_size[0]*2, 0)), str(self.game.dest_costs[x,y]), WHITE, bg)
+                self.render_cell(x, y, surface.subsurface(rect), bg)
 
     def size(self) -> tuple[int, int]:
-        char_width = self.font.get_rect(PLAYER_ICON).right
-        char_height =  self.font.get_sized_height(0)
-        self.char_size = (char_width, char_height)
+        """Size of grid with padding"""
         pad2 = self.pad * 2
-        self.grid_size = (
-            ((self.char_size[0]*3) + pad2) * 5 + pad2,
-            ((self.char_size[1]*3) + pad2) * 5 + pad2,
+        grid_size = (
+            (self.cell_size[0] + pad2) * self._size[0] + pad2,
+            (self.cell_size[1] + pad2) * self._size[1] + pad2,
         )
-        return self.grid_size
+        return grid_size
+
 
 class Flex(Renderable):
     """A grouping of GUI Elements. Horizontal or Vertical"""
