@@ -1,4 +1,3 @@
-
 import abc
 import copy
 import random
@@ -17,109 +16,136 @@ import pygame.locals
 from dataclasses import dataclass
 from enum import IntEnum
 
-Coordinate = tuple[int,int]
+Coordinate = tuple[int, int]
+
+
+# from typing import TypeVar
+# YIELD = TypeVar("YIELD")
+# RESULT = TypeVar("RESULT")
+# SEND = TypeVar("SEND")
+
+# def yield_from_send(gen: Generator[YIELD, SEND, RESULT], value: SEND) -> Generator[YIELD, SEND, RESULT]:
+#     """Utility function to start a yield from with a value for an already started generator"""
+#     try:
+#         while True:
+#             value = yield gen.send(value)
+#     except StopIteration as e:
+#         return e.value
+
+
+# Assumptions
+# Only on Decay per spot
+# Cannot "Stop" when moving a mythic
 
 
 @dataclass
 class DestCard:
     """Before Lunch and after lunch cards"""
+
     dests: list[Coordinate]
     keeper_moves: int
     books: list[Coordinate]
     respawn: list[Coordinate]
 
+
 # TODO: Add other cards
 BEFORE_LUNCH = DestCard(
     keeper_moves=4,
-    dests= [
-        (0,0),
-        (1,4),
-        (4,1),
+    dests=[
+        (0, 0),
+        (1, 4),
+        (4, 1),
     ],
-    books= [
-        (1,0),
-        (1,3),
-        (2,4),
-        (3,2),
+    books=[
+        (1, 0),
+        (1, 3),
+        (2, 4),
+        (3, 2),
     ],
-    respawn= [
-        (0,2),
-        (0,4),
-        (2,1),
-        (3,0),
-        (4,2),
-        (4,3),
-    ]
+    respawn=[
+        (0, 2),
+        (0, 4),
+        (2, 1),
+        (3, 0),
+        (4, 2),
+        (4, 3),
+    ],
+)
 
-)    
 
 @dataclass
 class StartLayout:
     """Starting Layouts from book or cards"""
+
     clutter: list[Coordinate]
     horz_walls: list[Coordinate]
     vert_walls: list[Coordinate]
 
+
 # TODO: Add other layouts
 START_LAYOUTS = [
     StartLayout(
-        clutter = [
-            (1,2),
-            (2,1),
-            (2,4),
-            (4,2),
+        clutter=[
+            (1, 2),
+            (2, 1),
+            (2, 4),
+            (4, 2),
         ],
-        horz_walls = [
-            (0,0),
-            (1,3),
-            (2,2),
-            (3,0),
-            (4,1),
+        horz_walls=[
+            (0, 0),
+            (1, 3),
+            (2, 2),
+            (3, 0),
+            (4, 1),
         ],
-        vert_walls = [
-            (0,1),
-            (1,2),
-            (2,1),
-            (2,4),
-            (3,3),
-        ]
+        vert_walls=[
+            (0, 1),
+            (1, 2),
+            (2, 1),
+            (2, 4),
+            (3, 3),
+        ],
     )
 ]
 
+
 @dataclass
-class Team():
+class Team:
     """Team specific info"""
+
     id_: int
     name: str
     move_other_attr: str
     move_shelf_attr: str
-    legendary_attr:str
-    after_lunch_attr: str 
+    legendary_attr: str
+    after_lunch_attr: str
 
-#TODO: Add more teams
+
+# TODO: Add more teams
 VAMPIRE = Team(
-    id_ = 0,
-    name = "Vampire",
-    move_other_attr = "Lure",
-    move_shelf_attr = "Conceal",
-    legendary_attr =  "Trance",
-    after_lunch_attr = "Blood",
+    id_=0,
+    name="Vampire",
+    move_other_attr="Lure",
+    move_shelf_attr="Conceal",
+    legendary_attr="Trance",
+    after_lunch_attr="Blood",
 )
 
 MONSTER = Team(
-    id_ = 1,
-    name = "Monster",
-    move_other_attr = "Throw",
-    move_shelf_attr = "Barge",
-    legendary_attr =  "Intemidate",
-    after_lunch_attr = "Trap",
+    id_=1,
+    name="Monster",
+    move_other_attr="Throw",
+    move_shelf_attr="Barge",
+    legendary_attr="Intemidate",
+    after_lunch_attr="Trap",
 )
 
 
 @dataclass
 class Player:
     """All the data relevent to a player"""
-    id_: int # maps to index in game.players and PLAYERS and To_Play
+
+    id_: int  # maps to index in game.players and PLAYERS and To_Play
     team: Team
 
     mythics: set[Coordinate]
@@ -147,33 +173,35 @@ class Player:
 
 # Colors
 # TODO: Refactor name to how they are used rather than color
-WHITE = (255,255,255)
-BLACK = (0,0,0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 YELLOW = (255, 255, 0)
 RED = (255, 0, 0)
 BLUE = (3, 173, 255)
-GRAY = (100,100,100)
+GRAY = (100, 100, 100)
 GREEN = (50, 255, 50)
 
 # Bit flags for board
 # TODO: Use Enum
-DEST = [1<<0, 1<<1, 1<<2]
-DEST_MASK = 1<<0 | 1<<1 | 1<<2
+DEST = [1 << 0, 1 << 1, 1 << 2]
+DEST_MASK = 1 << 0 | 1 << 1 | 1 << 2
 DEST_SHIFT = 0
-KEEPER = 1<<3
-BOOKS = [1<<4, 1<<5]
-BOOKS_MASK = 1<<4 | 1<<5
+KEEPER = 1 << 3
+BOOKS = [1 << 4, 1 << 5]
+BOOKS_MASK = 1 << 4 | 1 << 5
 RESPAWN = 1 << 6
 CLUTTER = 1 << 7
 HORZ_WALL = 1 << 8
 VERT_WALL = 1 << 9
-PLAYER = [1<<10, 1 << 11]
-PLAYER_MASK = 1<<10 | 1<<11
-PLAYER_SPECIAL = [1<<12, 1 << 13]
-PLAYER_SPECIAL_MASK = 1<<12 | 1<<13
+PLAYER = [1 << 10, 1 << 11]
+PLAYER_MASK = 1 << 10 | 1 << 11
+PLAYER_SPECIAL = [1 << 12, 1 << 13]
+PLAYER_SPECIAL_MASK = 1 << 12 | 1 << 13
+
 
 class Action(IntEnum):
     """Specific Actions that a player can take"""
+
     PASS = 0
     MOVE = 1
     MOVE_OTHER = 2
@@ -183,8 +211,10 @@ class Action(IntEnum):
     LEGENDARY = 6
     AFTER_LUNCH = 7
 
+
 class ActionPhase(IntEnum):
     """Describes what multistep action is being fulfilled"""
+
     PLACE_MYTHIC = 0
     USE_SKILL = 1
     MOVE = 2
@@ -200,6 +230,7 @@ class ActionPhase(IntEnum):
     DECAY_MOVE = 12
     END_GAME = 13
 
+
 class ActionType(IntEnum):
     SELECT_SELF = 0
     SELECT_OPP = 1
@@ -211,52 +242,51 @@ class ActionType(IntEnum):
     PASS = 7
 
 
-
-
 # Global blink variable. Is toggled by a pygame timer
 g_blink = False
 
+
 class PlayYield(NamedTuple):
-    """Result of a Play yield"""
+    """Intermediate yields of a Play coroutine"""
+
     to_play: int
     action_phase: ActionPhase
     actions_left: int
     action_type: ActionType
     available_actions: list[int]
 
+
 # Type alias for Play sub-functions
-# Does not end game
-PlayGenerator = Generator[
-            PlayYield,
-            int,
-            None]
-# Can end game
-PlayDoneGenerator = Generator[
-            PlayYield,
-            int,
-            tuple[bool, int]]
+# Play Coroutine that does not end game
+PlayCoroutine = Generator[PlayYield, int, None]
+# Play Coroutine that can end game
+PlayOrDoneCoroutine = Generator[PlayYield, int, tuple[bool, int]]
+
 
 class PlayableEnv(BaseEnv):
     """An env that can be played"""
-    action_names: list[str]
-    @abc.abstractmethod
-    def confirm_action(self, action: int) -> bool:
-        ...
 
-@ENV_REGISTRY.register('mythic_mischief_v0') 
+    action_names: list[str]
+
+    @abc.abstractmethod
+    def confirm_action(self, action: int) -> bool: ...
+
+
+@ENV_REGISTRY.register("mythic_mischief_v0")
 class MythicMischiefEnv(PlayableEnv):
     """Env for Mythic Mischief"""
+
     players: tuple[Player, Player]
     render_mode: str
     battle_mode: str
 
     config: dict[str, Any] = dict(
-         # (str) The name of the environment registered in the environment registry.
+        # (str) The name of the environment registered in the environment registry.
         env_id="MythicMischief_v0",
         # (str) The mode of the environment when take a step.
-        battle_mode='self_play_mode',
+        battle_mode="self_play_mode",
         # (str) The mode of the environment when doing the MCTS.
-        battle_mode_in_simulation_env='self_play_mode',
+        battle_mode_in_simulation_env="self_play_mode",
         # (str) The render mode. Options are 'None', 'human', 'rgb_array'
         # If None, then the game will not be rendered.
         render_mode=None,
@@ -281,37 +311,39 @@ class MythicMischiefEnv(PlayableEnv):
         # (float) The stop value when training the agent. If the evalue return reach the stop value, then the training will stop.
         # stop_value=2,
     )
+
     @classmethod
     def default_config(cls) -> EasyDict:
         cfg = EasyDict(copy.deepcopy(cls.config))
-        cfg.cfg_type = cls.__name__ + 'Dict'  # type: ignore
+        cfg.cfg_type = cls.__name__ + "Dict"  # type: ignore
         return cfg
-    
 
     def __init__(self, cfg: Optional[dict[str, Any]] = None) -> None:
         # Load the config.
         self.cfg = cfg
         assert cfg
 
-        self.render_mode = cfg['render_mode']
+        self.render_mode = cfg["render_mode"]
 
-        self.battle_mode = cfg['battle_mode']
-        assert self.battle_mode in ['self_play_mode', 'play_with_bot_mode', 'eval_mode']
+        self.battle_mode = cfg["battle_mode"]
+        assert self.battle_mode in ["self_play_mode", "play_with_bot_mode", "eval_mode"]
         # The mode of MCTS is only used in AlphaZero.
-        self.battle_mode_in_simulation_env = 'self_play_mode'
+        self.battle_mode_in_simulation_env = "self_play_mode"
 
         # play all keeper moves, even when there is only one option
         self.all_keeper_moves = False
 
         # ensure safe defaults. Most set in reset
-        self.board:np.ndarray[Coordinate, np.dtype[np.uint16]] = np.ndarray((5, 5), np.uint16)
+        self.board: np.ndarray[Coordinate, np.dtype[np.uint16]] = np.ndarray(
+            (5, 5), np.uint16
+        )
         self.available_actions = list[int]()
         self.confirming_action = None
         self.after_lunch = False
 
         # Setup pygame GUI
-        if self.render_mode == 'surface':
-            
+        if self.render_mode == "surface":
+
             if not pygame.get_init():
                 pygame.init()
             if not pygame.freetype.get_init():
@@ -319,41 +351,74 @@ class MythicMischiefEnv(PlayableEnv):
 
             # Choose a font size
             # GNU unifont has a LOT of unicode characters
-            font_size = 20 -1
+            font_size = 20 - 1
             line_size = 0
             font = None
-            while line_size < 20:    
+            while line_size < 20:
                 font_size += 1
-                font = pygame.freetype.SysFont('unifont', font_size)
+                font = pygame.freetype.SysFont("unifont", font_size)
                 line_size = font.get_sized_height(font_size)
             assert font
             assert font.fixed_width
             self.font = font
-            #print("debug: ", font_size, self.font.get_rect("Testy").width/5, self.font.get_sized_height(0))
+            # print("debug: ", font_size, self.font.get_rect("Testy").width/5, self.font.get_sized_height(0))
 
-            self.renderable = Flex(horz=False, items=[
-                Box(
-                    Flex(horz=True, items =[
-                        Box(StaticText("Mythic Mischief   ", self.font),color=BLACK),
-                        Box(self.attr_box(0, RED, lambda player: f"(0) pass", action=0), color=BLACK),
-                        Box(self.attr_box(1, BLUE, lambda player: f"(0) pass", action=0), color=BLACK),
-                        Box(self.game_attr_box( WHITE, lambda: "After Lunch" if self.after_lunch else "Before Lunch"), color=BLACK),
-                    ])
-                ),
-                Flex(horz=True, items=[
-                    self.player_board(0),
-                    self.game_board(),
-                    self.player_board(1),
-                ]),
-            ])
+            self.renderable = Flex(
+                horz=False,
+                items=[
+                    Box(
+                        Flex(
+                            horz=True,
+                            items=[
+                                Box(
+                                    StaticText("Mythic Mischief   ", self.font),
+                                    color=BLACK,
+                                ),
+                                Box(
+                                    self.attr_box(
+                                        0, RED, lambda player: "(0) pass", action=0
+                                    ),
+                                    color=BLACK,
+                                ),
+                                Box(
+                                    self.attr_box(
+                                        1, BLUE, lambda player: "(0) pass", action=0
+                                    ),
+                                    color=BLACK,
+                                ),
+                                Box(
+                                    self.game_attr_box(
+                                        WHITE,
+                                        lambda: (
+                                            "After Lunch"
+                                            if self.after_lunch
+                                            else "Before Lunch"
+                                        ),
+                                    ),
+                                    color=BLACK,
+                                ),
+                            ],
+                        )
+                    ),
+                    Flex(
+                        horz=True,
+                        items=[
+                            self.player_board(0),
+                            self.game_board(),
+                            self.player_board(1),
+                        ],
+                    ),
+                ],
+            )
             self.surface_size = self.renderable.size()
 
         # TODO: Define action_space and observation space
 
         # Crate easier names for actions
-        self.action_names = ([str(action) for action in Action] 
-                            + [f"{x},{y}" for x,y in (action_to_board(i+len(Action)) for i in range(5*5))])
-
+        self.action_names = [str(action) for action in Action] + [
+            f"{x},{y}"
+            for x, y in (action_to_board(i + len(Action)) for i in range(5 * 5))
+        ]
 
     def game_board(self) -> "Renderable":
         """Create the main game board GUI"""
@@ -475,6 +540,7 @@ class MythicMischiefEnv(PlayableEnv):
 
         return GameGrid(self.font, (5, 5), (char_size[0] * 3, char_size[1] * 3))
 
+    def player_board(self, player_id: int) -> "Box":
         """Create a GUI for a player"""
 
         if player_id == 0:
@@ -482,84 +548,163 @@ class MythicMischiefEnv(PlayableEnv):
         else:
             color = BLUE
 
-        return Box(Flex(horz=False, items=[
-           self.attr_box(player_id, color, lambda player: f"{player.team.name}"),
-           self.attr_box(player_id, color, lambda player: f"Score: {player.score}"),
-           self.attr_box(player_id, color, lambda player: f"(1) Move: {BOOK_ICON*player.move_tomes}{player.move}", action=1),
-           self.attr_box(player_id, color, lambda player: f"(2) Move Other ({player.team.move_other_attr}): {BOOK_ICON*player.move_other_tomes}{player.move_other}", action=2),
-           self.attr_box(player_id, color, lambda player: f"(3) Move Horz Shelf ({player.team.move_shelf_attr}): {BOOK_ICON*player.move_shelf_tomes}{player.move_shelf}", action=3), 
-           self.attr_box(player_id, color, lambda player: f"(4) Move Vert Shelf ({player.team.move_shelf_attr}): {BOOK_ICON*player.move_shelf_tomes}{player.move_shelf}", action=4), 
-           self.attr_box(player_id, color, lambda player: f"(5) Distract: {BOOK_ICON*player.distract_tomes}{player.distract}", action=5), 
-           self.attr_box(player_id, color, lambda player: f"(6) Legendary ({player.team.legendary_attr}): {BOOK_ICON if player.legendary else ''}", action=6),
-           self.attr_box(player_id, color, lambda player: f"(7) After Lunch({player.team.after_lunch_attr}): {player.after_lunch}", action=7),
-           self.attr_box(player_id, color, lambda player: f"Tomes : {BOOK_ICON * player.tomes}"),
-           self.attr_box(player_id, color, lambda player: f"Unplaced : {PLAYER_ICON * (3-len(player.mythics))}"),
-
-        ]), color = color)
+        return Box(
+            Flex(
+                horz=False,
+                items=[
+                    self.attr_box(
+                        player_id, color, lambda player: f"{player.team.name}"
+                    ),
+                    self.attr_box(
+                        player_id, color, lambda player: f"Score: {player.score}"
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(1) Move: {BOOK_ICON*player.move_tomes}{player.move}",
+                        action=1,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(2) Move Other ({player.team.move_other_attr}): {BOOK_ICON*player.move_other_tomes}{player.move_other}",
+                        action=2,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(3) Move Horz Shelf ({player.team.move_shelf_attr}): {BOOK_ICON*player.move_shelf_tomes}{player.move_shelf}",
+                        action=3,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(4) Move Vert Shelf ({player.team.move_shelf_attr}): {BOOK_ICON*player.move_shelf_tomes}{player.move_shelf}",
+                        action=4,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(5) Distract: {BOOK_ICON*player.distract_tomes}{player.distract}",
+                        action=5,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(6) Legendary ({player.team.legendary_attr}): {BOOK_ICON if player.legendary else ''}",
+                        action=6,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"(7) After Lunch({player.team.after_lunch_attr}): {player.after_lunch}",
+                        action=7,
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"Tomes : {BOOK_ICON * player.tomes}",
+                    ),
+                    self.attr_box(
+                        player_id,
+                        color,
+                        lambda player: f"Unplaced : {PLAYER_ICON * (3-len(player.mythics))}",
+                    ),
+                ],
+            ),
+            color=color,
+        )
 
     # hack to calc maxinum sizes
     MAX_PLAYERS = [
         Player(1, VAMPIRE, set(), 9, 3, 3, 4, 3, 4, 3, 4, 1, 1, 4, 9, None),
         Player(1, MONSTER, set(), 9, 3, 3, 4, 3, 4, 3, 4, 1, 1, 4, 9, None),
     ]
-    def attr_box(self, player_id: int, color: tuple[int,int,int], getter: Callable[[Player], str], action: Optional[int] = None):
+
+    def attr_box(
+        self,
+        player_id: int,
+        color: tuple[int, int, int],
+        getter: Callable[[Player], str],
+        action: Optional[int] = None,
+    ):
         """Define a GUI for a single player attribute. Also handles background highlight for actions"""
         max_size = max(len(getter(player)) for player in self.MAX_PLAYERS)
         game = self
-        class SubText( Text):
+
+        class SubText(Text):
             def text(self) -> str:
                 player = game.players[player_id]
                 return getter(player)
-            def bg(self) ->  tuple[int,int,int]:
-                if action is not None and game.to_play == player_id and action == game.confirming_action:
+
+            def bg(self) -> tuple[int, int, int]:
+                if (
+                    action is not None
+                    and game.to_play == player_id
+                    and action == game.confirming_action
+                ):
                     return GREEN
-                elif action is not None and game.to_play == player_id and action in game.available_actions:
+                elif (
+                    action is not None
+                    and game.to_play == player_id
+                    and action in game.available_actions
+                ):
                     return GRAY
                 else:
                     return BLACK
+
         return SubText(self.font, max_size, color=color)
-    def game_attr_box(self, color: tuple[int,int,int], getter: Callable[[], str]) -> "Renderable":
-        """ Define a GUI for a game level attribute"""
-        class SubText( Text):
+
+    def game_attr_box(
+        self, color: tuple[int, int, int], getter: Callable[[], str]
+    ) -> "Renderable":
+        """Define a GUI for a game level attribute"""
+
+        class SubText(Text):
             def text(self) -> str:
                 return getter()
+
         return SubText(self.font, len(getter()), color=color)
 
-    def reset(self, start_player_index: int = 0, init_state: Optional[Any] = None,
-              replay_name_suffix: Optional[str] = None) -> dict[str,Any]:
+    def reset(
+        self,
+        start_player_index: int = 0,
+        init_state: Optional[Any] = None,
+        replay_name_suffix: Optional[str] = None,
+    ) -> dict[str, Any]:
         """Reset the game state"""
         self.after_lunch = False
         self.confirming_action = None
 
-        #TODO: Randomize cards
+        # TODO: Randomize cards
         self.dest_card = BEFORE_LUNCH
         self.start_layout = START_LAYOUTS[0]
 
         # initialize board
         self.board.fill(0)
         self.dests = copy.deepcopy(self.dest_card.dests)
-        for i, (x,y) in enumerate(self.dest_card.dests):
-            self.board[x,y] |= DEST[i]
+        for i, (x, y) in enumerate(self.dest_card.dests):
+            self.board[x, y] |= DEST[i]
 
-        assert self.dest_card.keeper_moves <=4
-        x,y = self.keeper = (2,2)
-        self.board[x,y] |= KEEPER
+        assert self.dest_card.keeper_moves <= 4
+        x, y = self.keeper = (2, 2)
+        self.board[x, y] |= KEEPER
 
         assert len(self.dest_card.books) <= 4
-        for x,y in self.dest_card.books:
-            self.board[x,y] |= BOOKS[0] | BOOKS[1]
+        for x, y in self.dest_card.books:
+            self.board[x, y] |= BOOKS[0] | BOOKS[1]
 
-        for x,y in self.dest_card.respawn:
-            self.board[x,y] |=RESPAWN
+        for x, y in self.dest_card.respawn:
+            self.board[x, y] |= RESPAWN
 
-        for x,y in self.start_layout.clutter:
-            self.board[x,y] |= CLUTTER
+        for x, y in self.start_layout.clutter:
+            self.board[x, y] |= CLUTTER
 
-        for x,y in self.start_layout.horz_walls:
-            self.board[x,y] |= HORZ_WALL
+        for x, y in self.start_layout.horz_walls:
+            self.board[x, y] |= HORZ_WALL
 
-        for x,y in self.start_layout.vert_walls:
-            self.board[x,y] |= VERT_WALL
+        for x, y in self.start_layout.vert_walls:
+            self.board[x, y] |= VERT_WALL
 
         # Player initialization
         # TODO: Randomize player teams
@@ -575,31 +720,35 @@ class MythicMischiefEnv(PlayableEnv):
             # Random starting positions
             mask = PLAYER_MASK | KEEPER | BOOKS_MASK
 
-            available = [(i,j) for i in range(5) for j in range(5) if not (self.board[i][j] & mask)]
+            available = [
+                (i, j)
+                for i in range(5)
+                for j in range(5)
+                if not (self.board[i][j] & mask)
+            ]
 
             starts = random.sample(available, 6)
 
-            for (x,y) in starts[:3]:
-                self.board[x,y] |= PLAYER[0]
-                self.players[0].mythics.add((x,y))
-            for (x,y) in starts[3:]:
-                self.board[x,y] |= PLAYER[1]
-                self.players[1].mythics.add((x,y))
+            for x, y in starts[:3]:
+                self.board[x, y] |= PLAYER[0]
+                self.players[0].mythics.add((x, y))
+            for x, y in starts[3:]:
+                self.board[x, y] |= PLAYER[1]
+                self.players[1].mythics.add((x, y))
 
         # create play generator/co-routine
         self.play = self.start_play()
-        
+
         # Start the play sequence
         self.to_play, _, _, _, self.available_actions = next(self.play)
-
 
         return {
             "obs": None,
             "available_actions": self.available_actions,
-            "to_play": self.to_play
+            "to_play": self.to_play,
         }
-    
-    def confirm_action(self, action:int):
+
+    def confirm_action(self, action: int):
         """Confirm if action is valid and highlight in gui"""
         if action in self.available_actions:
             self.confirming_action = action
@@ -609,42 +758,53 @@ class MythicMischiefEnv(PlayableEnv):
 
     def step(self, action: int) -> BaseEnvTimestep:
         """Step through play"""
-        assert action in self.available_actions, f"invalid action: {action}. {action_to_board(action) if action >= len(Action) else ''}  "
+        assert (
+            action in self.available_actions
+        ), f"invalid action: {action}. {action_to_board(action) if action >= len(Action) else ''}  "
         # We are taking the action, so confirmation logic is reset
         self.confirming_action = None
         action_phase = actions_left = action_type = None
         try:
             # Send action to Play co-routine and get availible next steps
             # This results are what the co-routine yields
-            self.to_play, action_phase, actions_left, action_type, self.available_actions = self.play.send(action)
+            (
+                self.to_play,
+                action_phase,
+                actions_left,
+                action_type,
+                self.available_actions,
+            ) = self.play.send(action)
             assert action_phase is not None and actions_left and action_type is not None
 
             meta: dict[str, Any] = {
                 "player_name": self.players[self.to_play].team.name.title(),
-                "action_phase": action_phase.name.replace("_", " ").title() ,
+                "action_phase": action_phase.name.replace("_", " ").title(),
                 "actions_left": actions_left,
                 "action_type": action_type.name.replace("_", " ").title(),
             }
 
-            return BaseEnvTimestep({
-                "obs": None,
-                "available_actions": self.available_actions,
-                "to_play": self.to_play
-            }, 0, False, meta)
+            return BaseEnvTimestep(
+                {
+                    "obs": None,
+                    "available_actions": self.available_actions,
+                    "to_play": self.to_play,
+                },
+                0,
+                False,
+                meta,
+            )
         except StopIteration as e:
-            # Play co-routine returned  
+            # Play co-routine returned
             done, reward = e.value
         assert done
 
-
-        
         # Done.  Ensure to_play for calling logic
-        meta = {
+        meta: dict[str, Any] = {
             "player_name": self.players[self.to_play].team.name.title(),
         }
         return BaseEnvTimestep({"to_play": self.to_play}, reward, True, meta)
-    
-    def start_play(self) -> PlayDoneGenerator:
+
+    def start_play(self) -> PlayOrDoneCoroutine:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
         players = self.players
 
@@ -669,39 +829,48 @@ class MythicMischiefEnv(PlayableEnv):
                     return done, reward
                 yield from self.cleanup_phase(player)
 
-    def place_mythics(self, player: Player, anywhere: bool) -> PlayGenerator:
+    def place_mythics(self, player: Player, anywhere: bool) -> PlayCoroutine:
         """Place available mythics in spot in an available spot"""
         any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
         respawn_mask = PLAYER_MASK | KEEPER
 
-        available = [] # to make typechecker happy
+        available = []  # to make typechecker happy
 
-        while(len(player.mythics) < 3):
+        while len(player.mythics) < 3:
             if not anywhere:
-                available = [respawn for respawn in self.dest_card.respawn if not (self.board[respawn] & respawn_mask)]
+                available = [
+                    respawn
+                    for respawn in self.dest_card.respawn
+                    if not (self.board[respawn] & respawn_mask)
+                ]
                 if len(available) == 0:
-                    #if we can't place now, we wont be able to anytime this call. Start searching anywhere
+                    # if we can't place now, we wont be able to anytime this call. Start searching anywhere
                     anywhere = True
             if anywhere:
-                available = [(x,y) for x in range(5) for y in range(5) if not (self.board[x,y] & any_mask)]
-    
+                available = [
+                    (x, y)
+                    for x in range(5)
+                    for y in range(5)
+                    if not (self.board[x, y] & any_mask)
+                ]
+
             action = yield PlayYield(
-                player.id_, 
-                ActionPhase.PLACE_MYTHIC, 
-                3-len(player.mythics), 
+                player.id_,
+                ActionPhase.PLACE_MYTHIC,
+                3 - len(player.mythics),
                 ActionType.SELECT_DEST,
-                [board_to_action(x,y) for x,y in available]
+                [board_to_action(x, y) for x, y in available],
             )
             pos = action_to_board(action)
             self.board[pos] |= PLAYER[player.id_]
             player.mythics.add(pos)
 
-    def spend_tomes(self, player: Player) -> PlayGenerator:
+    def spend_tomes(self, player: Player) -> PlayCoroutine:
         """Spend all collected tomes on skills"""
-        
+
         # Online game forces spend
 
-        self.reset_skills(player) # This resets starting boost. See start_play
+        self.reset_skills(player)  # This resets starting boost. See start_play
         while player.tomes:
             available = list[int]()
             if player.move_tomes < 3:
@@ -716,11 +885,11 @@ class MythicMischiefEnv(PlayableEnv):
             if player.legendary < 1:
                 available.append(Action.LEGENDARY)
             action = yield PlayYield(
-                player.id_, 
-                ActionPhase.SPEND_TOME, 
-                player.tomes, 
+                player.id_,
+                ActionPhase.SPEND_TOME,
+                player.tomes,
                 ActionType.SELECT_SKILL,
-                available
+                available,
             )
             player.tomes -= 1
             if action == Action.MOVE:
@@ -737,12 +906,12 @@ class MythicMischiefEnv(PlayableEnv):
 
     def reset_skills(self, player: Player):
         """Reset all skills based on spent tomes"""
-        player.move = [3,4,5,6,7,8,9][player.move_tomes*2]
-        player.move_other = [1,1,2,2,3][player.move_other_tomes]
-        player.move_shelf = [0,1,2,2,3][player.move_shelf_tomes]
-        player.distract = [0,1,1,2,3][player.distract_tomes]
+        player.move = [3, 4, 5, 6, 7, 8, 9][player.move_tomes * 2]
+        player.move_other = [1, 1, 2, 2, 3][player.move_other_tomes]
+        player.move_shelf = [0, 1, 2, 2, 3][player.move_shelf_tomes]
+        player.distract = [0, 1, 1, 2, 3][player.distract_tomes]
 
-    def mythic_phase(self, player: Player) -> PlayDoneGenerator:
+    def mythic_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Phase where actions are performed by the mythics"""
         yield from self.place_mythics(player, False)
 
@@ -780,7 +949,7 @@ class MythicMischiefEnv(PlayableEnv):
             elif action == Action.PASS:
                 return False, 0
 
-    def do_move(self, player: Player) -> PlayGenerator:
+    def do_move(self, player: Player) -> PlayCoroutine:
 
         player_mask = PLAYER[player.id_]
         other_player_mask = PLAYER[player.id_ ^ 1]
@@ -928,7 +1097,8 @@ class MythicMischiefEnv(PlayableEnv):
 
         return
 
-    def do_distract(self, player: Player) -> PlayOrDoneGenerator:
+    def do_distract(self, player: Player) -> PlayOrDoneCoroutine:
+
         yield PlayYield(
             player.id_,
             ActionPhase.MOVE,
@@ -938,49 +1108,41 @@ class MythicMischiefEnv(PlayableEnv):
         )
 
         # Select mythic to perform distract
-        available = [board_to_action(x,y) for x,y in player.mythics]
+        available = [board_to_action(x, y) for x, y in player.mythics]
 
         action = yield PlayYield(
-            player.id_,
-            ActionPhase.DISTRACT,
-            2,
-            ActionType.SELECT_SELF,
-            available
+            player.id_, ActionPhase.DISTRACT, 2, ActionType.SELECT_SELF, available
         )
         dest = action_to_board(action)
-        x,y = self.keeper
+        x, y = self.keeper
 
         # find shortest path and options
         dest_costs = self.calc_dest_costs(dest)
-        
+
         available = list[int]()
         best_cost = 255
 
-        def inner(x:int, y:int, best_cost: int):
+        def inner(x: int, y: int, best_cost: int):
             """Inner function to reuse finicky code"""
-            cost = dest_costs[x,y]
+            cost = dest_costs[x, y]
             if cost < best_cost:
                 available.clear()
                 best_cost = cost
             if cost == best_cost:
-                available.append(board_to_action(x,y))  
-            return best_cost 
+                available.append(board_to_action(x, y))
+            return best_cost
 
-        if y < 4 and not (self.board[x,y] & HORZ_WALL):
-            best_cost = inner(x,y+1, best_cost)
-        if x < 4 and not (self.board[x,y] & VERT_WALL):
-            best_cost = inner(x+1,y, best_cost)
-        if y > 0 and not (self.board[x,y-1] & HORZ_WALL):
-            best_cost = inner(x,y-1, best_cost) 
-        if x>0 and not (self.board[x-1,y] & VERT_WALL):
-            best_cost = inner(x-1,y, best_cost) 
+        if y < 4 and not (self.board[x, y] & HORZ_WALL):
+            best_cost = inner(x, y + 1, best_cost)
+        if x < 4 and not (self.board[x, y] & VERT_WALL):
+            best_cost = inner(x + 1, y, best_cost)
+        if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+            best_cost = inner(x, y - 1, best_cost)
+        if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+            best_cost = inner(x - 1, y, best_cost)
 
         action = yield PlayYield(
-            player.id_,
-            ActionPhase.DISTRACT,
-            1,
-            ActionType.SELECT_DEST,
-            available
+            player.id_, ActionPhase.DISTRACT, 1, ActionType.SELECT_DEST, available
         )
 
         dest = action_to_board(action)
@@ -991,18 +1153,18 @@ class MythicMischiefEnv(PlayableEnv):
         return False, 0
         yield
 
-    def move_keeper(self,dest: Coordinate) -> tuple[bool, bool]:
+    def move_keeper(self, dest: Coordinate) -> tuple[bool, bool]:
         # Move Keeper
         popped_dest = False
-        x,y = self.keeper
-        self.board[x,y] ^= KEEPER
+        x, y = self.keeper
+        self.board[x, y] ^= KEEPER
 
         self.board[dest] |= KEEPER
         self.keeper = dest
 
         # check if keeper reached dest
         if self.dests and self.keeper == self.dests[0]:
-            self.board[self.dests[0]] ^= DEST[3-len(self.dests)]
+            self.board[self.dests[0]] ^= DEST[3 - len(self.dests)]
             _ = self.dests.pop(0)
             popped_dest = True
 
@@ -1021,42 +1183,40 @@ class MythicMischiefEnv(PlayableEnv):
             return True, False
         return False, popped_dest
 
-    def keeper_phase(self, player: Player) -> PlayDoneGenerator:
+    def keeper_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Move Keeper"""
         keeper_moves = self.dest_card.keeper_moves
 
         if self.dests:
-                dest = self.dests[0]
+            dest = self.dests[0]
         else:
-            dest = (2,2)
+            dest = (2, 2)
         dest_costs = self.calc_dest_costs(dest)
 
-            
-        def inner(x:int, y:int, best_cost: int):
+        def inner(x: int, y: int, best_cost: int):
             """Inner function to reuse finicky code"""
-            if keeper_moves >= 2 or not (self.board[x,y] & CLUTTER):
-                cost = dest_costs[x,y]
+            if keeper_moves >= 2 or not (self.board[x, y] & CLUTTER):
+                cost = dest_costs[x, y]
                 if cost < best_cost:
                     available.clear()
                     best_cost = cost
                 if cost == best_cost:
-                    available.append(board_to_action(x,y))  
-            return best_cost  
+                    available.append(board_to_action(x, y))
+            return best_cost
 
         while keeper_moves:
 
-
             available = list[int]()
             best_cost = 255
-            x,y = self.keeper
-            if y < 4 and not (self.board[x,y] & HORZ_WALL):
-                best_cost = inner(x,y+1, best_cost)
-            if x < 4 and not (self.board[x,y] & VERT_WALL):
-                best_cost = inner(x+1,y, best_cost)
-            if y > 0 and not (self.board[x,y-1] & HORZ_WALL):
-                best_cost = inner(x,y-1, best_cost) 
-            if x>0 and not (self.board[x-1,y] & VERT_WALL):
-                best_cost = inner(x-1,y, best_cost) 
+            x, y = self.keeper
+            if y < 4 and not (self.board[x, y] & HORZ_WALL):
+                best_cost = inner(x, y + 1, best_cost)
+            if x < 4 and not (self.board[x, y] & VERT_WALL):
+                best_cost = inner(x + 1, y, best_cost)
+            if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+                best_cost = inner(x, y - 1, best_cost)
+            if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+                best_cost = inner(x - 1, y, best_cost)
 
             assert available
             if True or self.all_keeper_moves or len(available) > 1:
@@ -1065,24 +1225,24 @@ class MythicMischiefEnv(PlayableEnv):
                     ActionPhase.MOVE_KEEPER,
                     keeper_moves,
                     ActionType.SELECT_DEST,
-                    available
+                    available,
                 )
             else:
                 # If only one choice, no need to ask player
                 action = available[0]
 
-            x,y = action_to_board(action)
-            done, popped_dest = self.move_keeper((x,y))
+            x, y = action_to_board(action)
+            done, popped_dest = self.move_keeper((x, y))
             if done:
                 return (yield from self.end_game())
-            
+
             if popped_dest:
                 if self.dests:
-                        dest = self.dests[0]
+                    dest = self.dests[0]
                 else:
-                    dest = (2,2)
+                    dest = (2, 2)
                 dest_costs = self.calc_dest_costs(dest)
-            if self.board[x,y] & CLUTTER:
+            if self.board[x, y] & CLUTTER:
                 keeper_moves -= 2
             else:
                 keeper_moves -= 1
@@ -1095,55 +1255,51 @@ class MythicMischiefEnv(PlayableEnv):
 
         return False, 0
 
-    def end_game(self) -> PlayDoneGenerator:
-            yield PlayYield(
-                0,
-                ActionPhase.END_GAME,
-                0,
-                ActionType.PASS,
-                [Action.PASS]
-            )
-            return True, 1
+    def end_game(self) -> PlayOrDoneCoroutine:
+        yield PlayYield(0, ActionPhase.END_GAME, 0, ActionType.PASS, [Action.PASS])
+        return True, 1
 
     def calc_dest_costs(self, dest: Coordinate):
         """Calculate costs for every cell to destination. Used for pathfinding"""
         # TODO: Review Algorithm
-        
-        dest_costs: np.ndarray[Coordinate, np.dtype[np.uint8]] = np.ndarray((5,5), np.uint8)
-        dest_costs.fill(255)
-        queue = list[tuple[Coordinate,int]]()
 
-        def inner(x: int,y: int ,cost: int):
-            if self.board[x,y] & CLUTTER:
+        dest_costs: np.ndarray[Coordinate, np.dtype[np.uint8]] = np.ndarray(
+            (5, 5), np.uint8
+        )
+        dest_costs.fill(255)
+        queue = list[tuple[Coordinate, int]]()
+
+        def inner(x: int, y: int, cost: int):
+            if self.board[x, y] & CLUTTER:
                 cost += 2
             else:
                 cost += 1
-            if dest_costs[x,y] > cost:
-                dest_costs[x,y] = cost
-                queue.append(((x,y), cost))
+            if dest_costs[x, y] > cost:
+                dest_costs[x, y] = cost
+                queue.append(((x, y), cost))
 
         inner(*dest, 0)
 
         while queue:
             node, cost = queue.pop(0)
-            x,y = node
-            if y < 4 and not (self.board[x,y] & HORZ_WALL):
-                inner(x, y+1, cost)
-            if x < 4 and not (self.board[x,y] & VERT_WALL):
-                inner(x+1, y, cost)
-            if y > 0 and not (self.board[x,y-1] & HORZ_WALL):
-                inner(x, y-1, cost)
-            if x>0 and not (self.board[x-1,y] & VERT_WALL):
-                inner(x-1, y, cost)    
+            x, y = node
+            if y < 4 and not (self.board[x, y] & HORZ_WALL):
+                inner(x, y + 1, cost)
+            if x < 4 and not (self.board[x, y] & VERT_WALL):
+                inner(x + 1, y, cost)
+            if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+                inner(x, y - 1, cost)
+            if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+                inner(x - 1, y, cost)
         return dest_costs
 
-    def cleanup_phase(self, player: Player) -> PlayGenerator:
+    def cleanup_phase(self, player: Player) -> PlayCoroutine:
         """Cleanup and reset skills, spend tomes and boosts"""
         yield from self.spend_tomes(player)
 
         # boosts
-        boosts = [0,0,0,0]
-        for i in [2,1]:
+        boosts = [0, 0, 0, 0]
+        for i in [2, 1]:
 
             available = list[int]()
             if player.move < 9:
@@ -1151,49 +1307,48 @@ class MythicMischiefEnv(PlayableEnv):
             if player.move_other < 3:
                 available.append(Action.MOVE_OTHER)
             if player.move_shelf < 3:
-                available.append(Action.MOVE_HORZ_SHELF)   
-                available.append(Action.MOVE_VERT_SHELF)            
+                available.append(Action.MOVE_HORZ_SHELF)
+                available.append(Action.MOVE_VERT_SHELF)
             if player.distract < 3:
                 available.append(Action.DISTRACT)
             action = yield PlayYield(
-                player.id_,
-                ActionPhase.BOOST,
-                i,
-                ActionType.SELECT_SKILL,
-                available
+                player.id_, ActionPhase.BOOST, i, ActionType.SELECT_SKILL, available
             )
             if action == Action.MOVE:
                 boosts[0] += 1
-                player.move = [3,4,5,6,7,8,9][player.move_tomes*2 + boosts[0]]
+                player.move = [3, 4, 5, 6, 7, 8, 9][player.move_tomes * 2 + boosts[0]]
             elif action == Action.MOVE_OTHER:
                 boosts[1] += 1
-                player.move_other = [1,1,2,2,3][player.move_other_tomes + boosts[1]]
+                player.move_other = [1, 1, 2, 2, 3][player.move_other_tomes + boosts[1]]
             elif action == Action.MOVE_HORZ_SHELF or action == Action.MOVE_VERT_SHELF:
                 boosts[2] += 1
-                player.move_shelf = [0,1,2,2,3][player.move_shelf_tomes + boosts[2]]
+                player.move_shelf = [0, 1, 2, 2, 3][player.move_shelf_tomes + boosts[2]]
             elif action == Action.DISTRACT:
                 boosts[3] += 1
-                player.distract = [0,1,1,2,3][player.distract_tomes + boosts[3]]
+                player.distract = [0, 1, 1, 2, 3][player.distract_tomes + boosts[3]]
 
-    def render(self, mode: Optional[str]=None)  -> None | np.ndarray[tuple[int,int,int], Any] | pygame.Surface:
+    def render(
+        self, mode: Optional[str] = None
+    ) -> None | np.ndarray[tuple[int, int, int], Any] | pygame.Surface:
         """Render current state for human review"""
         render_mode = self.render_mode
         assert mode is None or mode == render_mode
-        if render_mode in ("rgb_array", 'surface'):
+        if render_mode in ("rgb_array", "surface"):
             # for rgb_array, we still use pygame, then generate a ndarray
             screen = pygame.Surface(self.surface_size)
             screen.fill(BLACK)
-            
+
             self.renderable.render(screen)
 
-            if mode == 'rgb_array':
-                return pygame.surfarray.pixels3d(screen) # type: ignore
+            if mode == "rgb_array":
+                return pygame.surfarray.pixels3d(screen)  # type: ignore
             else:
                 return screen
         return None
 
     def __repr__(self) -> str:
         return "LightZero MythicMischief v0 Env"
+
     def close(self) -> None:
         pass
 
@@ -1203,24 +1358,31 @@ class MythicMischiefEnv(PlayableEnv):
         self._dynamic_seed = dynamic_seed
         np.random.seed(self._seed)
 
+
 def board_to_action(x: int, y: int):
     """Convert board coordinate to an action int"""
-    return y*5 + x+ len(Action)
+    return y * 5 + x + len(Action)
+
+
 def action_to_board(action: int):
     """Convert an action int to a board coordinate"""
     action -= len(Action)
-    return (action % 5, action//5 )
+    return (action % 5, action // 5)
+
 
 class Renderable(abc.ABC):
     """An (Abstract) renderable GUI Element"""
+
     @abc.abstractmethod
     def render(self, surface: Surface):
         """Render GUI Element"""
         ...
+
     @abc.abstractmethod
     def size(self) -> Coordinate:
         """Calculate size of GUI Element"""
         ...
+
 
 # Icons
 # TODO: use sprites
@@ -1346,12 +1508,15 @@ class Grid(Renderable):
 
 class Flex(Renderable):
     """A grouping of GUI Elements. Horizontal or Vertical"""
+
     def __init__(self, horz: bool, items: Optional[list[Renderable]] = None):
         self.horz = horz
         if items is None:
             items = []
         self.items = items
+
     def size(self) -> Coordinate:
+        """Size of the entire flex"""
         sizes = [i.size() for i in self.items]
         if self.horz:
             height = max(s[1] for s in sizes)
@@ -1361,12 +1526,15 @@ class Flex(Renderable):
             width = max(s[0] for s in sizes)
             self.chunks = [s[1] for s in sizes]
             return (width, sum(self.chunks))
+
     def render(self, surface: Surface):
+        """Render each part within a subsurface"""
         if self.horz:
             flex_size = surface.get_size()[1]
         else:
             flex_size = surface.get_size()[0]
         chunk_pos = 0
+        
         for i, i_size in zip(self.items, self.chunks):
             if self.horz:
                 sub = surface.subsurface(pygame.Rect(chunk_pos, 0, i_size, flex_size))
@@ -1375,76 +1543,105 @@ class Flex(Renderable):
             i.render(sub)
             chunk_pos += i_size
 
+
 class Text(Renderable):
     """A text GUI Element.  Subclass to make dynamic"""
-    def __init__(self, font: pygame.freetype.Font, max_size: int, color: tuple[int,int,int] =WHITE):
+
+    def __init__(
+        self,
+        font: pygame.freetype.Font,
+        max_size: int,
+        color: tuple[int, int, int] = WHITE,
+    ):
         self.font = font
-        self.max_size = max_size  
+        self.max_size = max_size
         self.color = color
+
     def size(self) -> Coordinate:
-        width = self.font.get_rect("X"* self.max_size).width
+        width = self.font.get_rect("X" * self.max_size).width
         return (width, self.font.get_sized_height(0))
+
     def render(self, surface: Surface):
         text = self.text()
         bg = self.bg()
-        self.font.render_to(surface, (0,0), text, self.color, bg)
+        self.font.render_to(surface, (0, 0), text, self.color, bg)
+
     def text(self) -> str:
-        return ''
-    def bg(self) -> tuple[int,int,int]:
+        return ""
+
+    def bg(self) -> tuple[int, int, int]:
         return BLACK
-    
+
+
 class StaticText(Text):
     """Static text"""
-    def __init__(self, text: str, font: pygame.freetype.Font, color: tuple[int,int,int] =WHITE):
+
+    def __init__(
+        self, text: str, font: pygame.freetype.Font, color: tuple[int, int, int] = WHITE
+    ):
         self.static_text = text
         super().__init__(font, len(text), color)
+
     def text(self) -> str:
         return self.static_text
 
+
 class Box(Renderable):
     """Create a box around an GUI item. Fills parent area"""
-    def __init__(self, inside: Renderable, pad: int = 10, line_width: int=1, color:tuple[int,int,int]=WHITE):
+
+    def __init__(
+        self,
+        inside: Renderable,
+        pad: int = 10,
+        line_width: int = 1,
+        color: tuple[int, int, int] = WHITE,
+    ):
         self.inside = inside
         self.pad = pad
         self.line_width = line_width
         self.color = color
-    def render(self, surface: Surface):
-        rect = pygame.Rect(0,0, *surface.get_size())
 
+    def render(self, surface: Surface):
+        rect = pygame.Rect(0, 0, *surface.get_size())
 
         rect.inflate_ip((-self.pad, -self.pad))
         pygame.draw.rect(surface, self.color, rect, width=self.line_width)
-        rect.inflate_ip((-self.pad,-self.pad))
+        rect.inflate_ip((-self.pad, -self.pad))
         self.inside.render(surface.subsurface(rect))
 
     def size(self) -> tuple[int, int]:
         inside_size = self.inside.size()
-        offset = self.pad*2
-        return (inside_size[0] + offset, inside_size[1] + offset )
+        offset = self.pad * 2
+        return (inside_size[0] + offset, inside_size[1] + offset)
 
-       
+
 class RenderableEnv(Renderable):
     """Wrap a Env to be usable with Renderable framewosk"""
+
     def __init__(self, env: BaseEnv):
         self.env = env
+
     def render(self, surface: Surface):
         rendered = cast(pygame.Surface, self.env.render())
-        surface.blit(rendered, (0,0))
+        surface.blit(rendered, (0, 0))
 
     def size(self) -> tuple[int, int]:
-        rendered =  cast(pygame.Surface, self.env.render())
+        rendered = cast(pygame.Surface, self.env.render())
         return rendered.get_size()
+
 
 def prompt(to_play: int, buffer: str, confirmed: bool, meta: dict[str, Any]):
     """Dynamic prompt"""
     # Own function to allow easy use of format strings
-    player_name = f" <{meta['player_name']}>" if 'player_name' in meta else ''
-    actions_left = f" ({meta['actions_left']})" if 'actions_left' in meta else ''
-    action_phase = f"{meta['action_phase']}{actions_left}: " if 'action_phase' in meta else ''
-    action_type = meta['action_type'] if 'action_type' in meta else 'Specify Action'
-    
+    player_name = f" <{meta['player_name']}>" if "player_name" in meta else ""
+    actions_left = f" ({meta['actions_left']})" if "actions_left" in meta else ""
+    action_phase = (
+        f"{meta['action_phase']}{actions_left}: " if "action_phase" in meta else ""
+    )
+    action_type = meta["action_type"] if "action_type" in meta else "Specify Action"
 
     return f"{action_phase}{action_type} for Player {to_play}{player_name}: {buffer}{'   (Enter to play)' if confirmed else ''}"
+
 
 def play(env: PlayableEnv, seed: Optional[int] = None):
     """Play a game"""
@@ -1453,33 +1650,32 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
     env.reset()
 
     # Reversk the map so we can generate actions
-    name_to_action = {k:v for v,k in enumerate(env.action_names)}
+    name_to_action = {k: v for v, k in enumerate(env.action_names)}
 
     running = True
     done = True  # Causes a first reset
-    obs: Optional[dict[str,Any]] = None
+    obs: Optional[dict[str, Any]] = None
     action: Optional[int] = None
-    meta = dict[str, Any]
-
-    
+    meta = dict[str, Any]()
 
     # Pygame, yay!
     pygame.init()
     pygame.freetype.init()
-    font = pygame.freetype.SysFont('unifont', 20)
+    font = pygame.freetype.SysFont("unifont", 20)
 
     # Play GUI consists of the ENV and a dynbamic prompt
     max_prompt = max(len(prompt(1, action, True, {})) for action in env.action_names)
     curr_prompt = ""
+
     class ActionBar(Text):
         """Renderable Text Subcalss for dynamic prompt"""
+
         def text(self) -> str:
             return curr_prompt
- 
-    display = Flex(horz=False, items=[
-        RenderableEnv(env),
-        Box(ActionBar(font, max_prompt))
-    ])
+
+    display = Flex(
+        horz=False, items=[RenderableEnv(env), Box(ActionBar(font, max_prompt))]
+    )
 
     # Initialize pygame window
     video_size = display.size()
@@ -1498,36 +1694,35 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
     script = []
     if True:
         script = [
-            "2,0", # place Mythic 1
-            "1,1", # place mythic 2
-            "3,1", # place mythic 3
-            "1",   # start tome in move
-            "2,1", # place mythic 1
-            "3,0", # place mythic 2
-            "0,0", # place mythic 3   
+            "2,0",  # place Mythic 1
+            "1,1",  # place mythic 2
+            "3,1",  # place mythic 3
+            "1",  # start tome in move
+            "2,1",  # place mythic 1
+            "3,0",  # place mythic 2
+            "0,0",  # place mythic 3
         ]
-        x = [
-            "0",   # pass
-            "2,1", # move keeper
+        x = [  # type: ignore
+            "0",  # pass
+            "2,1",  # move keeper
             "2,0",  # move keeper
             "1,0",  # move keeper
-            "1",   # boost move
-            "1",   # boost move
-
+            "1",  # boost move
+            "1",  # boost move
         ]
 
     while running:
         curr_prompt = prompt(to_play, buffer, confirmed, meta)
         if done:
             # Restart
-            done=False
+            done = False
             if seed is not None:
                 env.seed(seed)
             obs = env.reset()
             assert obs
-            to_play = cast(int, obs['to_play'])
-            buffer=""
-            confirmed=False
+            to_play = cast(int, obs["to_play"])
+            buffer = ""
+            confirmed = False
             action = None
         else:
             # Execute next step in script
@@ -1536,27 +1731,27 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
 
             # Execute pending actions
             if action is not None:
-                prev_obs = obs
-                obs, rew, done, meta = env.step(action)
+                # prev_obs = obs
+                obs, _, done, meta = env.step(action)
                 assert done or obs is not None
-                to_play = cast(int, obs['to_play'])
+                to_play = cast(int, obs["to_play"])
                 action = None
 
             # Render data
             if obs is not None:
-                #rendered = env.render()
-                #rendered = pygame.transform.scale(rendered, video_size)
+                # rendered = env.render()
+                # rendered = pygame.transform.scale(rendered, video_size)
                 screen.fill(BLACK)
                 display.render(screen)
-            
+
             # Process all pending events
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    running = False                
+                    running = False
                 elif event.type == pygame.QUIT:
                     running = False
 
-                #elif event.type == pygame.locals.VIDEORESIZE:
+                # elif event.type == pygame.locals.VIDEORESIZE:
                 #    video_size = event.size
                 #    game = pygame.display.set_mode(video_size)
 
@@ -1568,11 +1763,11 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
                         confirmed = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE:
                     if buffer:
-                        buffer = buffer[:-1] 
+                        buffer = buffer[:-1]
                         if buffer in name_to_action:
                             confirmed = env.confirm_action(name_to_action[buffer])
                         else:
-                            confirmed =  env.confirm_action(-1)
+                            confirmed = env.confirm_action(-1)
                 elif event.type == pygame.KEYDOWN:
                     buffer = buffer + event.unicode
                     if buffer in name_to_action:
@@ -1590,7 +1785,7 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
     pygame.quit()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cfg = MythicMischiefEnv.default_config()
-    cfg['render_mode']='surface'
-    play(MythicMischiefEnv(cfg)) 
+    cfg["render_mode"] = "surface"
+    play(MythicMischiefEnv(cfg))
