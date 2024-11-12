@@ -1,3 +1,7 @@
+"""
+Team specific data and logic for Frankentein's Monsters
+"""
+
 from MythicEnv.game import (
     Team,
     TeamData,
@@ -19,7 +23,6 @@ from MythicEnv import *
 from collections import defaultdict
 
 MonsterData = TeamData(
-    id_=1,
     name="Monster",
     move_skill_costs=[3, 4, 5, 6, 7, 8, 9],
     move_other_attr="Throw",
@@ -62,6 +65,11 @@ class Monster(Team):
                                 mythic, over
                             ):
                                 available[opp] = over
+
+
+        # This yield should return Action.MOVE_OTHER,
+        # but because of how this co-routine is called, 
+        # the first yield will return None,
         if any(v for v in available_moves.values()):
             yield PlayYield(
                 player.id_,
@@ -120,7 +128,7 @@ class Monster(Team):
                 up = (mythic[0], mythic[1] - 1)
 
                 # don't need to test src for >=4 since it has no walls
-                game.test_walls(
+                game.test_wall_moves(
                     Wall(wall_type, mythic),
                     available_moves,
                     # Horz
@@ -140,7 +148,7 @@ class Monster(Team):
                 )
                 pos = up if horz else left
                 if pos[0] >= 0 and pos[1] >= 0:
-                    game.test_walls(
+                    game.test_wall_moves(
                         Wall(wall_type, pos),
                         available_moves,
                         [
@@ -149,6 +157,9 @@ class Monster(Team):
                         ],
                     )
 
+        # This yield should return Action.MOVE_SHELF,
+        # but because of how this co-routine is called, 
+        # the first yield will return None,
         if any(src.wall_type == wall_type for src in available_moves.keys()):
             yield PlayYield(
                 player.id_,

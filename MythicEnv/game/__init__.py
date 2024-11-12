@@ -1,3 +1,9 @@
+"""
+Game logic code
+Subpackage, teams,  for team specific code
+
+"""
+
 import abc
 import copy
 from dataclasses import dataclass
@@ -55,7 +61,8 @@ def action_to_board(action: int):
 
 @dataclass
 class TeamData:
-    id_: int
+    """Team Specific Data"""
+
     name: str
     move_skill_costs: list[int]
     move_other_attr: str
@@ -100,6 +107,8 @@ class ActionPhase(IntEnum):
 
 
 class ActionType(IntEnum):
+    """What type of action is available. What do the the available actions represent"""
+
     SELECT_SELF = 0
     SELECT_OPP = 1
     SELECT_MYTHIC = 2
@@ -180,7 +189,6 @@ class Team(abc.ABC):
     """Team specific info"""
 
     data: TeamData
-
     game: "Optional[MythicMischiefGame]"
 
     def __init__(self, game: "Optional[MythicMischiefGame]"):
@@ -207,7 +215,6 @@ class MythicMischiefGame:
     start_layout: StartLayout
     dests: list[Coordinate]
 
-    # TODO: allow selection of player teams
     def __init__(self, player_teams: tuple[type[Team], type[Team]]):
         self.board = np.zeros((5, 5), np.uint16)
         self.after_lunch = False
@@ -338,17 +345,6 @@ class MythicMischiefGame:
                 player.legendary = 1
             self.reset_skills(player)
 
-    def reset_skills(self, player: Player):
-        """Reset all skills based on spent tomes"""
-        player.move = player.team.data.move_skill_costs[player.move_tomes * 2]
-        player.move_other = player.team.data.move_other_skill_costs[
-            player.move_other_tomes
-        ]
-        player.move_shelf = player.team.data.move_shelf_skill_costs[
-            player.move_shelf_tomes
-        ]
-        player.distract = player.team.data.distract_skill_costs[player.distract_tomes]
-
     def mythic_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Phase where actions are performed by the mythics"""
         yield from self.place_mythics(player, False)
@@ -388,30 +384,16 @@ class MythicMischiefGame:
             if action == Action.PASS:
                 return False, 0
 
-            # Because co-routine was alrady started,
-            # this will send a None back to the first yield
+            # Because co-routine was alrady started, 
+            # this will send a None back to the first yield of the selected routine
+            # Instead of the selected action
             done, reward = yield from routines[action]
             if done:
                 return done, reward
 
-    def check_neighbors(
-        self, pos: Coordinate, inner: Callable[[int, int, int], int], best_cost: int
-    ) -> int:
-        """Call inner for each neighber, keeping track of a best_cost"""
-        x, y = pos
-        if y < 4 and not (self.board[x, y] & HORZ_WALL):
-            best_cost = inner(x, y + 1, best_cost)
-        if x < 4 and not (self.board[x, y] & VERT_WALL):
-            best_cost = inner(x + 1, y, best_cost)
-        if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
-            best_cost = inner(x, y - 1, best_cost)
-        if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
-            best_cost = inner(x - 1, y, best_cost)
-        return best_cost
-
     # Does not really return Done, but needs PlayOrDoneCoroutine for parent code
     def play_move(self, player: Player) -> PlayOrDoneCoroutine:
-        """Play a mythic move"""
+        """Play a move own mythic skill"""
 
         player_mask = PLAYER[player.id_]
         other_player_mask = PLAYER[player.id_ ^ 1]
@@ -495,8 +477,10 @@ class MythicMischiefGame:
         #         # Make sure to reverse move
         #         self.board[mythic] |= player_mask
 
-        # Because of how this co-routine is called, the first yield may return:
-        # either None, or Action.MOVE
+        # This yield shoud retorn Action.Move,
+        # but because of how this co-routine is called, 
+        # the first yield may return either None, or Action.MOVE,
+        # Either way, we don't care
         if any(v for v in available_moves.values()):
             yield PlayYield(
                 player.id_,
@@ -550,7 +534,7 @@ class MythicMischiefGame:
         return False, 0
 
     def play_distract(self, player: Player) -> PlayOrDoneCoroutine:
-
+        """Play a distract skill"""
         available_moves = dict[Coordinate, list[int]]()
         # TODO: don't need to select mythic
         if player.distract:
@@ -572,7 +556,9 @@ class MythicMischiefGame:
                 best_cost = self.check_neighbors(self.keeper, inner, best_cost)
                 available_moves[mythic] = available
 
-        # Because of how this co-routine is called, the first yield will return None
+        # This yield shoud retorn Action.DISTRACT,
+        # but because of how this co-routine is called, 
+        # the first yield will return None,
         if any(v for v in available_moves.values()):
             yield PlayYield(
                 player.id_,
@@ -666,72 +652,6 @@ class MythicMischiefGame:
         )
         return True, reward
 
-    def move_mythic(self, player: Player, old: Coordinate, new: Coordinate):
-        player_mask = PLAYER[player.id_]
-
-        self.board[old] ^= player_mask
-        player.mythics.remove(old)
-        player.mythics.add(new)
-        self.board[new] |= player_mask
-
-        # check for book
-        if self.board[new] & BOOKS[player.id_]:
-            self.board[new] ^= BOOKS[player.id_]
-            player.tomes += 1
-
-    def move_keeper(self, dest: Coordinate) -> bool:
-        # Move Keeper
-        x, y = self.keeper
-        self.board[x, y] ^= KEEPER
-
-        self.board[dest] |= KEEPER
-        self.keeper = dest
-
-        # check if keeper reached dest
-        if self.dests and self.keeper == self.dests[0]:
-            self.board[self.dests[0]] ^= DEST[3 - len(self.dests)]
-            _ = self.dests.pop(0)
-
-        # Check if keeper caught any mythics
-        if self.board[dest] & PLAYER_MASK:
-            for player_id, mask in enumerate(PLAYER):
-                if self.board[dest] & mask:
-                    self.board[dest] ^= mask
-                    self.players[player_id].mythics.remove(self.keeper)
-                    self.players[player_id ^ 1].score += 1
-
-        # check score for endgame
-        # TODO: Refactor??
-        if any(p.score > 9 for p in self.players):
-            # end game
-            return True
-        return False
-
-    def calc_dest_costs(self, dest: Coordinate):
-        """Calculate costs for every cell to destination. Used for pathfinding"""
-        # TODO: Review Algorithm
-
-        dest_costs = np.full((5, 5), 255, np.uint8)
-        queue = list[tuple[Coordinate, int]]()
-
-        def inner(x: int, y: int, base_cost: int):
-            "add to dest_costs and queue if better cost"
-            if self.board[x, y] & CLUTTER:
-                cost = base_cost + 2
-            else:
-                cost = base_cost + 1
-            if cost < dest_costs[x, y]:
-                dest_costs[x, y] = cost
-                queue.append(((x, y), cost))
-            return base_cost
-
-        inner(*dest, 0)
-
-        while queue:
-            node, cost = queue.pop(0)
-            self.check_neighbors(node, inner, cost)
-        return dest_costs
-
     def cleanup_phase(self, player: Player) -> PlayCoroutine:
         """Cleanup and reset skills, spend tomes and boosts"""
         yield from self.spend_tomes(player)
@@ -774,6 +694,102 @@ class MythicMischiefGame:
                     player.distract_tomes + boosts[3]
                 ]
 
+    def reset_skills(self, player: Player):
+        """Reset all skills based on spent tomes"""
+        player.move = player.team.data.move_skill_costs[player.move_tomes * 2]
+        player.move_other = player.team.data.move_other_skill_costs[
+            player.move_other_tomes
+        ]
+        player.move_shelf = player.team.data.move_shelf_skill_costs[
+            player.move_shelf_tomes
+        ]
+        player.distract = player.team.data.distract_skill_costs[player.distract_tomes]
+
+    def move_mythic(self, player: Player, old: Coordinate, new: Coordinate) -> None:
+        """Actually move the mythic and do record keeping"""
+        player_mask = PLAYER[player.id_]
+
+        self.board[old] ^= player_mask
+        player.mythics.remove(old)
+        player.mythics.add(new)
+        self.board[new] |= player_mask
+
+        # check for book
+        if self.board[new] & BOOKS[player.id_]:
+            self.board[new] ^= BOOKS[player.id_]
+            player.tomes += 1
+
+    def move_keeper(self, dest: Coordinate) -> bool:
+        """Actually move the keeper, adjust scores and check for endgame"""
+        # Move Keeper
+        x, y = self.keeper
+        self.board[x, y] ^= KEEPER
+
+        self.board[dest] |= KEEPER
+        self.keeper = dest
+
+        # check if keeper reached dest
+        if self.dests and self.keeper == self.dests[0]:
+            self.board[self.dests[0]] ^= DEST[3 - len(self.dests)]
+            _ = self.dests.pop(0)
+
+        # Check if keeper caught any mythics
+        if self.board[dest] & PLAYER_MASK:
+            for player_id, mask in enumerate(PLAYER):
+                if self.board[dest] & mask:
+                    self.board[dest] ^= mask
+                    self.players[player_id].mythics.remove(self.keeper)
+                    self.players[player_id ^ 1].score += 1
+
+        # check score for endgame
+        # TODO: Refactor??
+        if any(p.score > 9 for p in self.players):
+            # end game
+            return True
+        return False
+
+    def check_neighbors(
+        self, pos: Coordinate, inner: Callable[[int, int, int], int], best_cost: int
+    ) -> int:
+        """Call inner for each neighber, keeping track of a best_cost"""
+        x, y = pos
+        if y < 4 and not (self.board[x, y] & HORZ_WALL):
+            best_cost = inner(x, y + 1, best_cost)
+        if x < 4 and not (self.board[x, y] & VERT_WALL):
+            best_cost = inner(x + 1, y, best_cost)
+        if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+            best_cost = inner(x, y - 1, best_cost)
+        if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+            best_cost = inner(x - 1, y, best_cost)
+        return best_cost
+
+    def calc_dest_costs(
+        self, dest: Coordinate
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.uint8]]:
+        """Calculate costs for every cell to destination. Used for pathfinding"""
+        # TODO: Review Algorithm
+
+        dest_costs = np.full((5, 5), 255, np.uint8)
+        queue = list[tuple[Coordinate, int]]()
+
+        def inner(x: int, y: int, base_cost: int):
+            "add to dest_costs and queue if better cost"
+            if self.board[x, y] & CLUTTER:
+                cost = base_cost + 2
+            else:
+                cost = base_cost + 1
+            if cost < dest_costs[x, y]:
+                dest_costs[x, y] = cost
+                queue.append(((x, y), cost))
+            return base_cost
+
+        inner(*dest, 0)
+
+        while queue:
+            node, cost = queue.pop(0)
+            self.check_neighbors(node, inner, cost)
+        return dest_costs
+
     def line_of_sight(
         self,
         mythic: Coordinate,
@@ -781,9 +797,9 @@ class MythicMischiefGame:
         min_distance: int = 1,
     ) -> Optional[Coordinate]:
         mask = KEEPER | PLAYER_MASK
+        # Horizontal and vertical
         for coord in [0, 1]:
             other_coord = coord ^ 1
-            # Horizontal
             if mythic[other_coord] == opp[other_coord]:
                 if min_distance <= abs(mythic[coord] - opp[coord]):
                     direction = 1 if mythic[coord] < opp[coord] else -1
@@ -812,12 +828,11 @@ class MythicMischiefGame:
                             return (0, direction)
                 return None
 
+        # diagonal
         x_direction = 1 if mythic[0] < opp[0] else -1
         y_direction = 1 if mythic[1] < opp[1] else -1
         if mythic[0] - opp[0] == x_direction * y_direction * (mythic[1] - opp[1]):
             if min_distance <= abs(mythic[0] - opp[0]):
-
-                # down, right
                 for pos in zip(
                     range(mythic[0] + x_direction, opp[0] + x_direction, x_direction),
                     range(mythic[1] + y_direction, opp[1] + y_direction, y_direction),
@@ -829,7 +844,7 @@ class MythicMischiefGame:
 
                     walls = self.cross_wall_bitset(wall_pos)
                     i = 0 if x_direction * y_direction == 1 else 1
-                    if self.check_walls(walls, DIAGONAL_WALL_MASKS[i]):
+                    if self.check_wall_bitset(walls, DIAGONAL_WALL_MASKS[i]):
                         break
                     elif pos[0] != opp[0] and self.board[pos] & mask:
                         break
@@ -849,7 +864,9 @@ class MythicMischiefGame:
         return acc
 
     @staticmethod
-    def check_walls(wall_bitset: int, test_bitset: int, count: int = 4, shift: int = 4):
+    def check_wall_bitset(
+        wall_bitset: int, test_bitset: int, count: int = 4, shift: int = 4
+    ) -> bool:
         """Check a wall mask against a set of masks"""
         mask = (1 << shift) - 1
         return any(
@@ -857,30 +874,30 @@ class MythicMischiefGame:
             for i in range(0, count * shift, shift)
         )
 
-    def left_wall(self, x: int, y: int):
-        return self.board[x - 1, y] & VERT_WALL
+    # def left_wall(self, x: int, y: int) -> bool:
+    #     return self.board[x - 1, y] & VERT_WALL
 
-    def right_wall(self, x: int, y: int):
-        return self.board[x, y] & VERT_WALL
+    # def right_wall(self, x: int, y: int) -> bool:
+    #     return self.board[x, y] & VERT_WALL
 
-    def top_wall(self, x: int, y: int):
-        return self.board[x, y - 1] & HORZ_WALL
+    # def top_wall(self, x: int, y: int) -> bool:
+    #     return self.board[x, y - 1] & HORZ_WALL
 
-    def bottom_wall(self, x: int, y: int):
-        return self.board[x, y] & HORZ_WALL
+    # def bottom_wall(self, x: int, y: int) -> bool:
+    #     return self.board[x, y] & HORZ_WALL
 
-    def test_walls(
+    def test_wall_moves(
         self,
         src_wall: Wall,
         available: dict[Wall, set[Wall]],
         dest_walls: list[Wall],
-    ):
-
+    ) -> None:
+        """Add legal walls moves to available"""
+        max_src_vert = 4 if src_wall.wall_type == VERT_WALL else 5
+        max_src_horz = 4 if src_wall.wall_type == HORZ_WALL else 5
         if (
-            0 <= src_wall.pos[0]
-            and 0 <= src_wall.pos[1]
-            and src_wall.pos[0] < (4 if src_wall.wall_type == VERT_WALL else 5)
-            and src_wall.pos[1] < (4 if src_wall.wall_type == HORZ_WALL else 5)
+            0 <= src_wall.pos[0] < max_src_vert
+            and 0 <= src_wall.pos[1] < max_src_horz
             and self.board[src_wall.pos] & src_wall.wall_type
         ):
             # Test Move: first step, remove current location (add back at end)
@@ -888,13 +905,11 @@ class MythicMischiefGame:
 
             for dest_wall in dest_walls:
                 # Check dest
+                max_dest_vert = 4 if dest_wall.wall_type == VERT_WALL else 5
+                max_dest_horz = 4 if dest_wall.wall_type == HORZ_WALL else 5
                 if (
-                    0 <= dest_wall.pos[0]
-                    and 0 <= dest_wall.pos[1]
-                    and dest_wall.pos[0]
-                    < (4 if dest_wall.wall_type == VERT_WALL else 5)
-                    and dest_wall.pos[1]
-                    < (4 if dest_wall.wall_type == HORZ_WALL else 5)
+                    0 <= dest_wall.pos[0] < max_dest_vert
+                    and 0 <= dest_wall.pos[1] < max_dest_horz
                     and not self.board[dest_wall.pos] & dest_wall.wall_type
                 ):
                     self.board[dest_wall.pos] |= dest_wall.wall_type
@@ -906,7 +921,7 @@ class MythicMischiefGame:
             self.board[src_wall.pos] |= src_wall.wall_type
 
     def check_wall_invariant(self) -> bool:
-
+        """Check to make sure all spaces are available"""
         # Breadth first search from top left.  Should hit every cell
         #
         seen = np.zeros((5, 5), np.bool_)
