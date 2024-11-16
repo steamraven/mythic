@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Python Debugger: Play",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "MythicEnv.env"
+        },
+        {
+            "name": "Python Debugger: Train",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "MythicEnv.muzero_sp_mode_config"
+        },
+        {
+            "name": "Python Debugger: Python File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}"
+        }
+    ]
+}
