@@ -55,20 +55,26 @@ class Monster(Team):
         available_moves = dict[Coordinate, dict[Coordinate, Coordinate]]()
         if player.move_other:
             for mythic in player.mythics:
-                available = available_moves[mythic] = dict[Coordinate, Coordinate]()
+                available = available_moves[mythic] = dict[Coordinate, Coordinate](
+                )
                 for opp in other_player.mythics:
+                    assert mythic != opp
                     if abs(mythic[0] - opp[0]) <= 1 and abs(mythic[1] - opp[1]) <= 1:
                         direction = game.line_of_sight(mythic, opp)
                         if direction:
                             over = (-1 * direction[0], -1 * direction[1])
-                            if not game.board[over] & mask and game.line_of_sight(
-                                mythic, over
+                            if (
+                                0 <= over[0] <= 4
+                                and 0 <= over[1] <= 4
+                                and not game.board[over] & mask
+                                and game.line_of_sight(
+                                    mythic, over
+                                )
                             ):
                                 available[opp] = over
 
-
         # This yield should return Action.MOVE_OTHER,
-        # but because of how this co-routine is called, 
+        # but because of how this co-routine is called,
         # the first yield will return None,
         if any(v for v in available_moves.values()):
             yield PlayYield(
@@ -158,7 +164,7 @@ class Monster(Team):
                     )
 
         # This yield should return Action.MOVE_SHELF,
-        # but because of how this co-routine is called, 
+        # but because of how this co-routine is called,
         # the first yield will return None,
         if any(src.wall_type == wall_type for src in available_moves.keys()):
             yield PlayYield(
@@ -193,7 +199,6 @@ class Monster(Team):
         player.move_shelf -= 1
         dest = Wall(o_wall_type, action_to_board(action))
 
-        game.board[src.pos] ^= src.wall_type
-        game.board[dest.pos] |= dest.wall_type
+        game.move_wall(src, dest)
 
         return False, 0

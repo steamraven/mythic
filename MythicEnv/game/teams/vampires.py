@@ -181,7 +181,6 @@ class Vampire(Team):
         player.move_shelf -= 1
         dest = Wall(o_wall_type, action_to_board(action))
 
-        game.board[src.pos] ^= src.wall_type
-        game.board[dest.pos] |= dest.wall_type
+        game.move_wall(src, dest)
 
         return False, 0

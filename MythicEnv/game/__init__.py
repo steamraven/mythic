@@ -242,6 +242,17 @@ class MythicMischiefGame:
             Player(1, player_teams[1](self)),
         )
 
+        self.player_skills = [
+            {
+                Action.MOVE: self.play_move,
+                Action.MOVE_OTHER: player.team.play_move_other,
+                Action.MOVE_HORZ_SHELF: player.team.play_move_horz_shelf,
+                Action.MOVE_VERT_SHELF: player.team.play_move_vert_shelf,
+                Action.DISTRACT: self.play_distract,
+            }
+            for player in self.players
+        ]
+
         # second player gets an extra tome to start
         self.players[1].tomes += 1
 
@@ -265,6 +276,7 @@ class MythicMischiefGame:
                 done, reward = yield from self.mythic_phase(player)
                 if done:
                     return done, reward
+                assert not player.occupying
                 done, reward = yield from self.keeper_phase(player)
                 if done:
                     return done, reward
@@ -359,19 +371,12 @@ class MythicMischiefGame:
                 yield from self.play_move(player)
                 continue
 
-            skills: dict[Action, PlaySkill] = {
-                Action.MOVE: self.play_move,
-                Action.MOVE_OTHER: player.team.play_move_other,
-                Action.MOVE_HORZ_SHELF: player.team.play_move_horz_shelf,
-                Action.MOVE_VERT_SHELF: player.team.play_move_vert_shelf,
-                Action.DISTRACT: self.play_distract,
-            }
-
-            routines: dict[int, PlayOrDoneCoroutine] = {
+            skills = self.player_skills[player.id_]
+            skill_coroutines: dict[int, PlayOrDoneCoroutine] = {
                 a: skill(player) for a, skill in skills.items()
             }
 
-            for a, r in routines.items():
+            for a, r in skill_coroutines.items():
                 y = next(r)
                 assert y.to_play == player.id_
                 assert len(y.available_actions) == 0 or y.available_actions == [a]
@@ -387,7 +392,7 @@ class MythicMischiefGame:
             # Because co-routine was alrady started, 
             # this will send a None back to the first yield of the selected routine
             # Instead of the selected action
-            done, reward = yield from routines[action]
+            done, reward = yield from skill_coroutines[action]
             if done:
                 return done, reward
 
@@ -429,7 +434,8 @@ class MythicMischiefGame:
         # If player has a mythic occupying another mythics stop, only that mythic can move
         if player.occupying:
             mythics = [player.occupying]
-            assert player.move
+            if not (player.move):
+                assert player.move
         else:
             mythics = player.mythics
 
@@ -529,7 +535,10 @@ class MythicMischiefGame:
         player.move -= cost
 
         # Check for mythic occupying space of another
-        player.occupying = mythic if self.board[dest] & other_player_mask else None
+        player.occupying = dest if self.board[dest] & other_player_mask else None
+        if player.occupying:
+            if not (player.move):
+                assert player.move
 
         return False, 0
 
@@ -642,15 +651,22 @@ class MythicMischiefGame:
         # TODO: Switch lunches
         # TODO: Proper end
         if not self.dests:
-            return (yield from self.end_game(player, 1))
+            if self.players[0].score > self.players[1].score:
+                return (yield from self.end_game(self.players[0], 1))
+            if self.players[1].score > self.players[0].score:
+                return (yield from self.end_game(self.players[1], 1))
+            return (yield from self.end_game(player, 0))
+
+            
 
         return False, 0
 
     def end_game(self, player: Player, reward: int) -> PlayOrDoneCoroutine:
-        yield PlayYield(
-            player.id_, ActionPhase.END_GAME, 0, ActionType.PASS, [Action.PASS]
-        )
+        #yield PlayYield(
+        #    player.id_, ActionPhase.END_GAME, 1, ActionType.PASS, [Action.PASS]
+        #)
         return True, reward
+        yield
 
     def cleanup_phase(self, player: Player) -> PlayCoroutine:
         """Cleanup and reset skills, spend tomes and boosts"""
@@ -709,6 +725,11 @@ class MythicMischiefGame:
         """Actually move the mythic and do record keeping"""
         player_mask = PLAYER[player.id_]
 
+        if not (0<=new[0]<=4 and 0<=new[1]<=4):
+            assert (0<=new[0]<=4 and 0<=new[1]<=4)
+        if not (self.board[old] & player_mask and old in player.mythics):
+            assert self.board[old] & player_mask and old in player.mythics
+
         self.board[old] ^= player_mask
         player.mythics.remove(old)
         player.mythics.add(new)
@@ -722,8 +743,14 @@ class MythicMischiefGame:
     def move_keeper(self, dest: Coordinate) -> bool:
         """Actually move the keeper, adjust scores and check for endgame"""
         # Move Keeper
-        x, y = self.keeper
-        self.board[x, y] ^= KEEPER
+
+        if not (0<=dest[0]<=4 and 0<=dest[1]<=4):
+            assert (0<=dest[0]<=4 and 0<=dest[1]<=4)
+
+        if not (self.board[self.keeper] & KEEPER):
+            assert self.board[self.keeper] & KEEPER
+
+        self.board[self.keeper] ^= KEEPER
 
         self.board[dest] |= KEEPER
         self.keeper = dest
@@ -747,6 +774,17 @@ class MythicMischiefGame:
             # end game
             return True
         return False
+
+    def move_wall(self, src: Wall, dest: Wall):
+        if dest.wall_type == HORZ_WALL:
+            if not (0<=dest.pos[0]<=4 and 0<=dest.pos[1]<=3):
+                assert (0<=dest.pos[0]<=4 and 0<=dest.pos[1]<=3)
+        else:
+            if not (0<=dest.pos[0]<=3 and 0<=dest.pos[1]<=4):
+                assert (0<=dest.pos[0]<=3 and 0<=dest.pos[1]<=4)
+
+        self.board[src.pos] ^= src.wall_type
+        self.board[dest.pos] |= dest.wall_type
 
     def check_neighbors(
         self, pos: Coordinate, inner: Callable[[int, int, int], int], best_cost: int
@@ -838,8 +876,8 @@ class MythicMischiefGame:
                     range(mythic[1] + y_direction, opp[1] + y_direction, y_direction),
                 ):
                     wall_pos = (
-                        pos[0] - 1 if y_direction == 1 else pos[0],
-                        pos[1] - 1 if x_direction == 1 else pos[1],
+                        pos[0] - 1 if x_direction == 1 else pos[0],
+                        pos[1] - 1 if y_direction == 1 else pos[1],
                     )
 
                     walls = self.cross_wall_bitset(wall_pos)
@@ -855,6 +893,8 @@ class MythicMischiefGame:
     def cross_wall_bitset(self, pos: Coordinate) -> int:
         """Create a bitset of walls at the bottom right intersection of position"""
         acc = 0
+        if not (0<=pos[0]<=3 and 0<=pos[1]<=3):
+            assert 0<=pos[0]<=3 and 0<=pos[1]<=3
         x, y = pos
         value: int = self.board[pos]
         acc |= 0x1 if value & VERT_WALL else 0  # Up
