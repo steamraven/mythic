@@ -2,6 +2,7 @@ import copy
 import random
 from typing import Any, Optional
 
+import gym.spaces
 import numpy as np
 import pygame
 
@@ -11,15 +12,16 @@ from ding.envs.env.base_env import BaseEnvTimestep
 from ding.utils.registry_factory import ENV_REGISTRY
 import pygame.freetype
 import pygame.locals
+from gymnasium import spaces
+import gym
 
-from MythicEnv.surface_render import MythicMischiefRenderable, find_font
 from . import *
 from MythicEnv.renderable import *
 from MythicEnv.data import *
-from MythicEnv.play import PlayableEnv, play
+from MythicEnv.play import PlayableEnv, play_env
 from MythicEnv.game import *
-from MythicEnv.game.teams.vampires import *
-from MythicEnv.game.teams.monsters import *
+from MythicEnv.game.teams import *
+from MythicEnv.surface_render import MythicMischiefRenderable, find_font
 
 # from typing import TypeVar
 # YIELD = TypeVar("YIELD")
@@ -43,8 +45,11 @@ from MythicEnv.game.teams.monsters import *
 # Only one Decay per spot
 
 
+ACTION_SPACE_LEN = 8+5*5
+assert ACTION_SPACE_LEN == len(Action) + 5*5
+
 @ENV_REGISTRY.register("mythic_mischief_v0")
-class MythicMischiefEnv(PlayableEnv):
+class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
     """Env for Mythic Mischief"""
 
     render_mode: str
@@ -71,25 +76,25 @@ class MythicMischiefEnv(PlayableEnv):
         # If None, then the game will not be rendered.
         render_mode=None,
         # (str or None) The directory in which to save the replay file. If None, the file is saved in the current directory.
-        # replay_path=None,
+        replay_path=None,
         # (str) The type of the bot of the environment.
         # bot_action_type='rule',
         # (bool) Whether to let human to play with the agent when evaluating. If False, then use the bot to evaluate the agent.
-        # agent_vs_human=False,
+        agent_vs_human=False,
         # (float) The probability that a random agent is used instead of the learning agent.
-        # prob_random_agent=0,
+        prob_random_agent=0,
         # (float) The probability that an expert agent(the bot) is used instead of the learning agent.
-        # prob_expert_agent=0,
+        prob_expert_agent=0,
         # (float) The probability that a random action will be taken when calling the bot.
-        # prob_random_action_in_bot=0.,
+        prob_random_action_in_bot=0.,
         # (float) The scale of the render screen.
-        # screen_scaling=9,
+        screen_scaling=1,
         # (bool) Whether to use the 'channel last' format for the observation space. If False, 'channel first' format is used.
-        # channel_last=False,
+        channel_last=False,
         # (bool) Whether to scale the observation.
-        # scale=False,
+        scale=False,
         # (float) The stop value when training the agent. If the evalue return reach the stop value, then the training will stop.
-        # stop_value=2,
+        stop_value=2,
     )
 
     @classmethod
@@ -120,6 +125,13 @@ class MythicMischiefEnv(PlayableEnv):
         self.available_action_type: Optional[ActionType] = None
         self.confirming_action = None
 
+        self.team_ids = {
+            t:i for i,t in enumerate(Team.__subclasses__())
+        }
+        assert len(self.team_ids) <= 4
+        self.game_state = None
+
+
         # Setup pygame GUI
         if self.render_mode == "surface":
 
@@ -144,7 +156,6 @@ class MythicMischiefEnv(PlayableEnv):
             for x, y in (action_to_board(i + len(Action)) for i in range(5 * 5))
         ]
 
-        self.game_state = None
 
 
 
@@ -202,11 +213,9 @@ class MythicMischiefEnv(PlayableEnv):
             self.available_actions,
         ) = next(self.play)
 
-        return {
-            "obs": self.get_observation(),
-            "available_actions": self.available_actions,
-            "to_play": self.to_play,
-        }
+        self.history = []
+
+        return self.get_observation()
 
     def confirm_action(self, action: int):
         """Confirm if action is valid and highlight in gui"""
@@ -218,11 +227,20 @@ class MythicMischiefEnv(PlayableEnv):
 
     def step(self, action: int) -> BaseEnvTimestep:
         """Step through play"""
+        action = int(action)
         assert (
             action in self.available_actions
         ), f"invalid action: {action}. {action_to_board(action) if action >= len(Action) else ''}  "
         # We are taking the action, so confirmation logic is reset
         self.confirming_action = None
+        self.history.append((
+            self.to_play, 
+            self.available_action_phase.name,
+            self.available_action_type.name,
+            action, 
+            Action(action).name if action < len(Action) else "", 
+            action_to_board(action) if action >= len(Action) else None
+        ))
 
         game_state = self.game_state
         assert game_state
@@ -256,12 +274,8 @@ class MythicMischiefEnv(PlayableEnv):
             }
 
             return BaseEnvTimestep(
-                {
-                    "obs": self.get_observation(),
-                    "available_actions": self.available_actions,
-                    "to_play": self.to_play,
-                },
-                0,
+                self.get_observation(),
+                np.array(0.0).astype(np.float32),
                 False,
                 meta,
             )
@@ -270,14 +284,17 @@ class MythicMischiefEnv(PlayableEnv):
             done, reward = e.value
         assert done
 
+        reward = np.array(float(reward)).astype(np.float32)
+
         # Done.  Ensure to_play for calling logic
         meta: dict[str, Any] = {
             "player_name": game_state.players[self.to_play].team.data.name.title(),
+            "eval_episode_return":  -reward if self.to_play == 1 else reward
         }
-        return BaseEnvTimestep({"to_play": self.to_play}, reward, True, meta)
+        return BaseEnvTimestep(self.get_observation(), reward, True, meta)
 
-    def get_observation(self):
-        obs = np.zeros((23, 5, 5), np.uint8)
+    def get_observation(self) -> dict[str, Any]:
+        obs = np.zeros((23, 5, 5), np.float32)
         game_state = self.game_state
         assert game_state
         board = game_state.board
@@ -313,7 +330,8 @@ class MythicMischiefEnv(PlayableEnv):
         # Player state (4 levels)
         s = 14
         for s, player in zip((14, 18), game_state.players):
-            obs[s + player.team.data.id_ + 1, 0, 0] = 1
+            team_id = self.team_ids[type(player.team)]
+            obs[s + team_id + 1, 0, 0] = 1
             score = player.score
             score1 = min(score, 4)
             if score1:
@@ -428,11 +446,30 @@ class MythicMischiefEnv(PlayableEnv):
             if action in mapping:
                 obs[22, mapping[action]] = 1
 
-    def legal_actions(self):
-        pass
+        action_mask = np.zeros(ACTION_SPACE_LEN, "int8")
+        for i in self.available_actions:
+            action_mask[i] = 1
+        return {
+            'observation': obs,
+            'action_mask': action_mask,
+            'to_play': self.to_play
+        }
 
-    action_space = None
-    observation_space = None
+    @property
+    def legal_actions(self) -> list[int]:
+        return self.available_actions
+    
+
+    action_space = cast(gym.spaces.Space[np.int64], spaces.Discrete(ACTION_SPACE_LEN))
+    observation_space = cast(gym.spaces.Space[np.int8], spaces.Dict(
+            {
+                "observation": spaces.Box(low=0, high=1, shape=(23, 5, 5), dtype=np.int8),
+                "action_mask": spaces.Box(low=0, high=1, shape=(ACTION_SPACE_LEN,), dtype=np.int8),
+                "to_play": spaces.Discrete(2),
+            }
+        )
+    )
+    reward_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
     def render(
         self, mode: Optional[str] = None
@@ -472,4 +509,4 @@ class MythicMischiefEnv(PlayableEnv):
 if __name__ == "__main__":
     cfg = MythicMischiefEnv.default_config()
     cfg["render_mode"] = "surface"
-    play(MythicMischiefEnv(cfg))
+    play_env(MythicMischiefEnv(cfg))
