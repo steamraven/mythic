@@ -1,6 +1,13 @@
+# Use cpu torch
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
+# Required version of panda3d not in pypi
 --extra-index-url https://archive.panda3d.org/
 pooltool-billiards
+# bsuite local to enable python3.12
 ./bsuite
+# Lightzero is the main library. Editable so we can make changes
 -e ./LightZero
+# runtime requirements
+pyecharts
+transformers
