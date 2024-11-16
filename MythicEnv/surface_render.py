@@ -1,7 +1,7 @@
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 import pygame.freetype
 from pygame import Surface
-from MythicEnv.env import MythicMischiefEnv
+#from MythicEnv.env import MythicMischiefEnv
 from MythicEnv.game import (
     BOOKS,
     BOOKS_MASK,
@@ -24,6 +24,10 @@ from MythicEnv.game.teams.monsters import Monster
 from MythicEnv.game.teams.vampires import Vampire
 from MythicEnv.renderable import *
 import numpy as np
+
+if TYPE_CHECKING:
+    # avoid circular import
+    import MythicEnv.env
 
 
 def find_font(size: int):
@@ -51,7 +55,7 @@ PLAYER_SPECIAL_ICON = "*"
 
 
 class MythicMischiefRenderable(Renderable):
-    def __init__(self, game: MythicMischiefEnv, font: pygame.freetype.Font):
+    def __init__(self, game: "MythicEnv.env.MythicMischiefEnv", font: pygame.freetype.Font):
         self.font = font
         self.game = game
         self.flex = Flex(
@@ -106,9 +110,6 @@ class MythicMischiefRenderable(Renderable):
     def game_board(self) -> Renderable:
         """Create the main game board GUI"""
         game = self.game
-        game_state = game.game_state
-        assert game_state
-        board = game_state.board
 
         # Size grid according to size of Monospaced characters
         char_size = (
@@ -145,7 +146,8 @@ class MythicMischiefRenderable(Renderable):
 
             def cell_border(self, x: int, y: int) -> BorderDef:
                 # Render walls as borders
-                data: np.uint16 = board[x, y]
+                assert game.game_state
+                data: np.uint16 = game.game_state.board[x, y]
                 assert game.available_action_type is not None
                 action_type = game.available_action_type
 
@@ -188,7 +190,8 @@ class MythicMischiefRenderable(Renderable):
             def render_cell(
                 self, x: int, y: int, surface: Surface, bg: tuple[int, int, int]
             ):
-                data: np.uint16 = board[x, y]
+                assert game.game_state
+                data: np.uint16 = game.game_state.board[x, y]
 
                 # Rect is moved around
                 char_rect = pygame.Rect(0, 0, char_size[0], char_size[1])
@@ -359,12 +362,11 @@ class MythicMischiefRenderable(Renderable):
         """Define a GUI for a single player attribute. Also handles background highlight for actions"""
         max_size = max(len(getter(player)) for player in self.MAX_PLAYERS)
         game = self.game
-        game_state = game.game_state
-        assert game_state
 
         class SubText(Text):
             def text(self) -> str:
-                player = game_state.players[player_id]
+                assert game.game_state
+                player = game.game_state.players[player_id]
                 return getter(player)
 
             def bg(self) -> tuple[int, int, int]:
