@@ -1,14 +1,18 @@
 import abc
 import random
-from typing import Any, Optional, cast
+from typing import Any, Optional, TypeVar, cast
 
 from ding.envs.env.base_env import BaseEnv
 import pygame
 import pygame.freetype
+import gym
 
 from MythicEnv.renderable import Text, RenderableEnv, Flex, Box, BLACK, toggle_blink
 
-class PlayableEnv(BaseEnv):
+ObsType = TypeVar("ObsType")
+ActType = TypeVar("ActType")
+
+class PlayableEnv( BaseEnv[ObsType, ActType] ):
     """An env that can be played"""
 
     action_names: list[str]
@@ -30,7 +34,7 @@ def prompt(to_play: int, buffer: str, confirmed: bool, meta: dict[str, Any]):
     return f"{action_phase}{action_type} for Player {to_play}{player_name}: {buffer}{'   (Enter to play)' if confirmed else ''}"
 
 
-def play(env: PlayableEnv, seed: Optional[int] = None):
+def play_env(env: PlayableEnv[ActType, ObsType], seed: Optional[int] = None):
     """Play a game"""
     if seed is not None:
         env.seed(seed)
@@ -130,9 +134,9 @@ def play(env: PlayableEnv, seed: Optional[int] = None):
             # Execute next step in script
             if script:
                 if script[0] == 'random':
-                    if obs and "available_actions" in obs:
-                        
-                        action = random.choice(obs['available_actions'])
+                    if obs and "action_mask" in obs:
+                        available_actions = [i for i,v in enumerate(obs['action_mask']) if v]
+                        action = random.choice(available_actions)
                         print(f"Playing Action: {script[0]}: {action}")
                         script.pop(0)
                 else:
