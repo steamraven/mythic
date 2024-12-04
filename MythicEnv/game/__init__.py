@@ -187,7 +187,6 @@ PlaySkill = Callable[[Player], PlayOrDoneCoroutine]
 T_Yield = TypeVar("T_Yield")
 T_Return = TypeVar("T_Return")
 T_Send = TypeVar("T_Send")
-T_Closure = TypeVar("T_Closure")
 
 @dataclass
 class Yield(Generic[T_Yield]):
@@ -198,11 +197,11 @@ class Return(Generic[T_Return]):
     value: T_Return
 
 @dataclass
-class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return, T_Closure]):
+class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
     step: int = 0
 
     @abc.abstractmethod
-    def send(self, closure: T_Closure, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
+    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
         ...
     @staticmethod
     def yield_(value: T_Yield):
@@ -211,8 +210,8 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return, T_Closure]):
     def return_(value: T_Return):
         return Return[T_Return](value)
 
-PlayGenerator = ClonableGenerator[PlayYield, int, None, "MythicMischiefGame"]
-PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int], "MythicMischiefGame"]
+PlayGenerator = ClonableGenerator[PlayYield, int, None]
+PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
 PlaySkill_ = Callable[[Player], PlayOrDoneGenerator]
 
 
@@ -290,8 +289,7 @@ class MythicMischiefGame:
     def start_play(self) -> PlayOrDoneGenerator:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
         class PlayState(PlayOrDoneGenerator):
-            #place_mythics: Optional[PlayCoroutine] = None
-
+            gamestate: MythicMischiefGame
             def send(self, value: Optional[int]):
                 gamestate = self.gamestate
                 action = value

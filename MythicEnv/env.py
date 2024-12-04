@@ -205,7 +205,7 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         self.play = self.game_state.start_play()
 
         # Start the play sequence
-        y_or_r = self.play.send(self.game_state, None)
+        y_or_r = self.play.send(None)
         assert isinstance(y_or_r, Yield)
         (
             self.to_play,
@@ -251,7 +251,7 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         
         # Send action to Play co-routine and get availible next steps
         # This results are what the co-routine yields
-        y_or_r = self.play.send(game_state, action)
+        y_or_r = self.play.send(action)
         if isinstance(y_or_r, Yield):
             (
                 self.to_play,
