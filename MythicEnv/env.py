@@ -205,13 +205,15 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         self.play = self.game_state.start_play()
 
         # Start the play sequence
+        y_or_r = self.play.send(self.game_state, None)
+        assert isinstance(y_or_r, Yield)
         (
             self.to_play,
             self.available_action_phase,
             self.available_actions_left,
             self.available_action_type,
             self.available_actions,
-        ) = next(self.play)
+        ) = y_or_r.value
 
         self.history = []
 
@@ -246,16 +248,18 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         assert game_state
         assert self.play
 
-        try:
-            # Send action to Play co-routine and get availible next steps
-            # This results are what the co-routine yields
+        
+        # Send action to Play co-routine and get availible next steps
+        # This results are what the co-routine yields
+        y_or_r = self.play.send(game_state, action)
+        if isinstance(y_or_r, Yield):
             (
                 self.to_play,
                 self.available_action_phase,
                 self.available_actions_left,
                 self.available_action_type,
                 self.available_actions,
-            ) = self.play.send(action)
+            ) =  y_or_r.value
             assert (
                 self.available_action_phase is not None
                 and self.available_actions_left
@@ -279,9 +283,9 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
                 False,
                 meta,
             )
-        except StopIteration as e:
+        else:
             # Play co-routine returned
-            done, reward = e.value
+            done, reward = y_or_r.value
         assert done
 
         reward = np.array(float(reward)).astype(np.float32)
