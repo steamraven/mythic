@@ -318,10 +318,9 @@ class MythicMischiefGame:
                 if self.step == 2:
                     # run: yield from self.place_mythics(players[0], True)
                     assert self.place_mythics
-                    try:
-                        return self.yield_(self.place_mythics.send(action))
-                    except StopIteration:
-                        pass
+                    y_or_r = self.place_mythics.send(action)
+                    if isinstance(y_or_r, Yield):
+                        return self.yield_(y_or_r.value)
                     # Player 2 gets a tome, but does not affect start boost
                     # start_boost = players[1].move_shelf
                     self.start_boost = players[1].move_shelf
@@ -346,10 +345,9 @@ class MythicMischiefGame:
                 if self.step == 4:
                     # run: yield from self.place_mythics(players[1], True)
                     assert self.place_mythics
-                    try:
-                        return self.yield_(self.place_mythics.send(action))
-                    except StopIteration:
-                        pass
+                    y_or_r = self.place_mythics.send(action)
+                    if isinstance(y_or_r, Yield):
+                        return self.yield_(y_or_r.value)
                     self.step += 1
                 # Main loop 
                 while True:
@@ -426,41 +424,76 @@ class MythicMischiefGame:
         return state
 
 
-    def place_mythics(self, player: Player, anywhere: bool) -> PlayCoroutine:
+    def place_mythics(self, player: Player, anywhere: bool) -> PlayGenerator:
         """Place available mythics in spot in an available spot"""
-        any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
-        respawn_mask = PLAYER_MASK | KEEPER
+        class PlaceMythicsState(PlayGenerator):
+            gamestate: MythicMischiefGame
+            player: Player
+            anywhere: bool
+            def send(self, value: Optional[int]):
+                gamestate = self.gamestate
+                action = value
+                any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
+                respawn_mask = PLAYER_MASK | KEEPER
 
-        available = []  # to make typechecker happy
+                if self.step == 0:
+                    # Init
+                    assert Action is None
+                    self.available = []  # to make typechecker happy
+                    self.step += 1
+                else:
+                    assert action is not None
+                    
+                # while len(player.mythics) < 3:
+                while True:
+                    if self.step == 1:
+                        # Check loop condition
+                        if not (len(self.player.mythics) < 3):
+                            self.step = 3
+                            break
+                        available = []  # to make typechecker happy
+                        if not self.anywhere:
+                            available = [
+                                respawn
+                                for respawn in gamestate.dest_card.respawn
+                                if not (gamestate.board[respawn] & respawn_mask)
+                            ]
+                            if len(available) == 0:
+                                # if we can't place now, we wont be able to anytime this call. Start searching anywhere
+                                self.anywhere = True
+                        if self.anywhere:
+                            available = [
+                                (x, y)
+                                for x in range(5)
+                                for y in range(5)
+                                if not (gamestate.board[x, y] & any_mask)
+                            ]
 
-        while len(player.mythics) < 3:
-            if not anywhere:
-                available = [
-                    respawn
-                    for respawn in self.dest_card.respawn
-                    if not (self.board[respawn] & respawn_mask)
-                ]
-                if len(available) == 0:
-                    # if we can't place now, we wont be able to anytime this call. Start searching anywhere
-                    anywhere = True
-            if anywhere:
-                available = [
-                    (x, y)
-                    for x in range(5)
-                    for y in range(5)
-                    if not (self.board[x, y] & any_mask)
-                ]
+                        self.step += 1
+                        # action = yield PlayYield(
+                        return self.yield_(
+                            PlayYield(
+                                self.player.id_,
+                                ActionPhase.PLACE_MYTHIC,
+                                3 - len(self.player.mythics),
+                                ActionType.SELECT_DEST,
+                                [board_to_action(x, y) for x, y in available],
+                            )
+                        )
+                    if self.step == 2:
+                        assert action is not None
+                        pos = action_to_board(action)
+                        gamestate.board[pos] |= PLAYER[self.player.id_]
+                        self.player.mythics.add(pos)
+                        self.step = 1 # Restart for loop
+                        continue
+                return self.return_(None)
 
-            action = yield PlayYield(
-                player.id_,
-                ActionPhase.PLACE_MYTHIC,
-                3 - len(player.mythics),
-                ActionType.SELECT_DEST,
-                [board_to_action(x, y) for x, y in available],
-            )
-            pos = action_to_board(action)
-            self.board[pos] |= PLAYER[player.id_]
-            player.mythics.add(pos)
+        state = PlaceMythicsState()
+        state.gamestate = self
+        state.player = player
+        state.anywhere = anywhere
+        return state
 
     def spend_tomes(self, player: Player) -> PlayCoroutine:
         """Spend all collected tomes on skills"""
@@ -503,7 +536,7 @@ class MythicMischiefGame:
 
     def mythic_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Phase where actions are performed by the mythics"""
-        yield from self.place_mythics(player, False)
+        yield from self.place_mythics(player, False).as_generator()
 
         # TODO: all skills/abilities
         while True:
