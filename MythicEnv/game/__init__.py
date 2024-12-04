@@ -209,6 +209,14 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
     @staticmethod
     def return_(value: T_Return):
         return Return[T_Return](value)
+    def as_generator(self)-> Generator[T_Yield, T_Send, T_Return]:
+        v = None
+        while True:
+            y_or_r = self.send(v)
+            if isinstance(y_or_r, Yield):
+                yield y_or_r.value
+            else:
+                return y_or_r.value
 
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
 PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
