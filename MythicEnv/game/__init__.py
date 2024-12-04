@@ -575,14 +575,12 @@ class MythicMischiefGame:
 
         # TODO: all skills/abilities
         while True:
-
-            available: list[int] = [Action.PASS]
-
             if player.occupying:
                 # Cannot stop movement on another players space.  Or activate other actins
                 yield from self.play_move(player)
                 continue
-
+            
+            available: list[int] = [Action.PASS]
             skills = self.player_skills[player.id_]
             skill_coroutines: dict[int, PlayOrDoneCoroutine] = {
                 a: skill(player) for a, skill in skills.items()
