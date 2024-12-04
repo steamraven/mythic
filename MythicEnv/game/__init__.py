@@ -331,10 +331,9 @@ class MythicMischiefGame:
                 if self.step == 3:
                     # run: yield from self.spend_tomes(players[1])
                     assert self.spend_tomes
-                    try:
-                        self.yield_(self.spend_tomes.send(action))
-                    except StopIteration:
-                        pass
+                    y_or_r = self.spend_tomes.send(action)
+                    if isinstance(y_or_r, Yield):
+                        return self.yield_(y_or_r.value)
                     # players[1].move_shelf = start_boost
                     players[1].move_shelf = self.start_boost
 
@@ -495,44 +494,80 @@ class MythicMischiefGame:
         state.anywhere = anywhere
         return state
 
-    def spend_tomes(self, player: Player) -> PlayCoroutine:
+    def spend_tomes(self, player: Player) -> PlayGenerator:
         """Spend all collected tomes on skills"""
 
-        # Online game forces spend
+        class SpendTomesState(PlayGenerator):
+            gamestate: MythicMischiefGame
+            player: Player
+            def send(self, value: Optional[int]):
+                action = value
+                gamestate = self.gamestate
+                player = self.player
 
-        self.reset_skills(player)  # This resets starting boost. See start_play
-        while player.tomes:
-            available = list[int]()
-            if player.move_tomes < 3:
-                available.append(Action.MOVE)
-            if player.move_other_tomes < 4:
-                available.append(Action.MOVE_OTHER)
-            if player.move_shelf_tomes < 4:
-                available.append(Action.MOVE_HORZ_SHELF)
-                available.append(Action.MOVE_VERT_SHELF)
-            if player.distract_tomes < 4:
-                available.append(Action.DISTRACT)
-            if player.legendary < 1:
-                available.append(Action.LEGENDARY)
-            action = yield PlayYield(
-                player.id_,
-                ActionPhase.SPEND_TOME,
-                player.tomes,
-                ActionType.SELECT_SKILL,
-                available,
-            )
-            player.tomes -= 1
-            if action == Action.MOVE:
-                player.move_tomes += 1
-            elif action == Action.MOVE_OTHER:
-                player.move_other_tomes += 1
-            elif action == Action.MOVE_HORZ_SHELF or action == Action.MOVE_VERT_SHELF:
-                player.move_shelf_tomes += 1
-            elif action == Action.DISTRACT:
-                player.distract_tomes += 1
-            elif action == Action.LEGENDARY:
-                player.legendary = 1
-            self.reset_skills(player)
+                # Online game forces spend
+
+                if self.step == 0:
+                    # init
+                    assert action is None
+                    gamestate.reset_skills(player)  # This resets starting boost. See start_play
+                    self.step+= 1
+                else:
+                    assert action is not None
+
+                # while player.tomes:
+                while True:
+                    if self.step == 1:
+                        if not player.tomes:
+                            self.step = 3
+                            break
+                        available = list[int]()
+                        if player.move_tomes < 3:
+                            available.append(Action.MOVE)
+                        if player.move_other_tomes < 4:
+                            available.append(Action.MOVE_OTHER)
+                        if player.move_shelf_tomes < 4:
+                            available.append(Action.MOVE_HORZ_SHELF)
+                            available.append(Action.MOVE_VERT_SHELF)
+                        if player.distract_tomes < 4:
+                            available.append(Action.DISTRACT)
+                        if player.legendary < 1:
+                            available.append(Action.LEGENDARY)
+                        self.step += 1
+                        # action = yield PlayYield(
+                        return self.yield_(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.SPEND_TOME,
+                                player.tomes,
+                                ActionType.SELECT_SKILL,
+                                available,
+                            )
+                        )
+                    
+                    if self.step == 2:
+                        assert action is not None
+                        player.tomes -= 1
+                        if action == Action.MOVE:
+                            player.move_tomes += 1
+                        elif action == Action.MOVE_OTHER:
+                            player.move_other_tomes += 1
+                        elif action == Action.MOVE_HORZ_SHELF or action == Action.MOVE_VERT_SHELF:
+                            player.move_shelf_tomes += 1
+                        elif action == Action.DISTRACT:
+                            player.distract_tomes += 1
+                        elif action == Action.LEGENDARY:
+                            player.legendary = 1
+                        # TODO: Is this needed maybe move out
+                        gamestate.reset_skills(player)
+                        self.step = 1
+                        continue # Resume for loop
+                return self.return_(None)
+
+        state = SpendTomesState()
+        state.gamestate = self
+        state.player = player
+        return state
 
     def mythic_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Phase where actions are performed by the mythics"""
@@ -862,7 +897,7 @@ class MythicMischiefGame:
 
     def cleanup_phase(self, player: Player) -> PlayCoroutine:
         """Cleanup and reset skills, spend tomes and boosts"""
-        yield from self.spend_tomes(player)
+        yield from self.spend_tomes(player).as_generator()
 
         # boosts
         boosts = [0, 0, 0, 0]
