@@ -409,24 +409,42 @@ class MythicMischiefGame:
         ) -> list[tuple[Coordinate, int]]:
             available = list[tuple[Coordinate, int]]()
 
-            def inner(x: int, y: int, _: int):
-                """Add space to available if reachable.  May recurse for occupied spots"""
-                if self.board[x, y] & not_available_mask:
-                    return 0
-                cost = 2 if self.board[x, y] & CLUTTER else 1
+            # def inner(x: int, y: int, _: int):
+            #     """Add space to available if reachable.  May recurse for occupied spots"""
+            #     if self.board[x, y] & not_available_mask:
+            #         return 0
+            #     cost = 2 if self.board[x, y] & CLUTTER else 1
 
-                # If the destination has another player, make sure there is an exit
-                if remaining > cost and self.board[x, y] & other_player_mask:
-                    next_moves = find_available_moves((x, y), remaining - cost)
-                    if next_moves:
-                        cost += min(a[1] for a in next_moves)
-                    else:
-                        cost = 255
+            #     # If the destination has another player, make sure there is an exit
+            #     if self.board[x, y] & other_player_mask:
+            #         if remaining > cost: 
+            #             next_moves = find_available_moves((x, y), remaining - cost)
+            #             if next_moves:
+            #                 cost += min(a[1] for a in next_moves)
+            #                 available.append(((x, y), cost))
+            #         return 0
+
+            #     if remaining >= cost:
+            #         available.append(((x, y), cost))
+            #     return 0
+
+            for n in self.get_neighbors(pos):
+                if self.board[n] & not_available_mask:
+                    continue
+                cost = 2 if self.board[pos] & CLUTTER else 1
+                if self.board[n] & other_player_mask:
+                    if remaining > cost: 
+                        next_moves = find_available_moves(n, remaining - cost)
+                        if next_moves:
+                            cost += min(a[1] for a in next_moves)
+                            available.append((n, cost))
+                    continue
+                
                 if remaining >= cost:
-                    available.append(((x, y), cost))
-                return 0
+                    available.append((n, cost))
 
-            self.check_neighbors(pos, inner, 0)
+
+            #self.check_neighbors(pos, inner, 0)
             return available
 
         available_moves = dict[Coordinate, list[tuple[Coordinate, int]]]()
@@ -552,17 +570,17 @@ class MythicMischiefGame:
                 available = list[int]()
                 best_cost = 255
 
-                def inner(x: int, y: int, best_cost: int):
-                    """Find coordinate of best dest_cost"""
-                    cost = dest_costs[x, y]
-                    if cost < best_cost:
+                # Distract takes into account clutter for pathfinding (see calc_dest_costs)
+                # But clutter not counted for the move. 
+                # i.e. can be distrated onto clutter
+                for n in self.get_neighbors(self.keeper):
+                    n_cost = dest_costs[n]
+                    if n_cost < best_cost:
                         available.clear()
-                        best_cost = cost
-                    if cost == best_cost:
-                        available.append(board_to_action(x, y))
-                    return best_cost
+                        best_cost = n_cost
+                    if n_cost == best_cost:
+                        available.append(board_to_action(*n))
 
-                best_cost = self.check_neighbors(self.keeper, inner, best_cost)
                 available_moves[mythic] = available
 
         # This yield shoud retorn Action.DISTRACT,
@@ -606,23 +624,20 @@ class MythicMischiefGame:
             dest = (2, 2)
         dest_costs = self.calc_dest_costs(dest)
 
-        def inner(x: int, y: int, best_cost: int):
-            """Find coordinate of best  dest_cost"""
-            if keeper_moves >= 2 or not (self.board[x, y] & CLUTTER):
-                cost = dest_costs[x, y]
-                if cost < best_cost:
-                    available.clear()
-                    best_cost = cost
-                if cost == best_cost:
-                    available.append(board_to_action(x, y))
-            return best_cost
-
         while keeper_moves:
 
             available = list[int]()
             best_cost = 255
 
-            best_cost = self.check_neighbors(self.keeper, inner, best_cost)
+            for n in self.get_neighbors(self.keeper):
+                if keeper_moves >= 2 or not (self.board[n] & CLUTTER):
+                    # Can't move onto clutter if not enough moves
+                    n_cost = dest_costs[n]
+                    if n_cost < best_cost:
+                        available.clear()
+                        best_cost = n_cost
+                    if n_cost == best_cost:
+                        available.append(board_to_action(*n))
 
             assert available
             if True or self.all_keeper_moves or len(available) > 1:
@@ -786,20 +801,31 @@ class MythicMischiefGame:
         self.board[src.pos] ^= src.wall_type
         self.board[dest.pos] |= dest.wall_type
 
-    def check_neighbors(
-        self, pos: Coordinate, inner: Callable[[int, int, int], int], best_cost: int
-    ) -> int:
-        """Call inner for each neighber, keeping track of a best_cost"""
+    # def check_neighbors(
+    #     self, pos: Coordinate, inner: Callable[[int, int, int], int], best_cost: int
+    # ) -> int:
+    #     """Call inner for each neighber, keeping track of a best_cost"""
+    #     x, y = pos
+    #     if y < 4 and not (self.board[x, y] & HORZ_WALL):
+    #         best_cost = inner(x, y + 1, best_cost)
+    #     if x < 4 and not (self.board[x, y] & VERT_WALL):
+    #         best_cost = inner(x + 1, y, best_cost)
+    #     if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
+    #         best_cost = inner(x, y - 1, best_cost)
+    #     if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
+    #         best_cost = inner(x - 1, y, best_cost)
+    #     return best_cost
+
+    def get_neighbors(self, pos: Coordinate) -> Generator[Coordinate]:
         x, y = pos
         if y < 4 and not (self.board[x, y] & HORZ_WALL):
-            best_cost = inner(x, y + 1, best_cost)
+            yield x, y+1
         if x < 4 and not (self.board[x, y] & VERT_WALL):
-            best_cost = inner(x + 1, y, best_cost)
+            yield x + 1, y
         if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
-            best_cost = inner(x, y - 1, best_cost)
+           yield x, y - 1
         if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
-            best_cost = inner(x - 1, y, best_cost)
-        return best_cost
+            yield x - 1, y
 
     def calc_dest_costs(
         self, dest: Coordinate
@@ -808,24 +834,35 @@ class MythicMischiefGame:
         # TODO: Review Algorithm
 
         dest_costs = np.full((5, 5), 255, np.uint8)
-        queue = list[tuple[Coordinate, int]]()
+        cost = 2 if self.board[dest] & CLUTTER else 1
+        queue = [(dest, cost)]
+        dest_costs[dest] = cost
 
-        def inner(x: int, y: int, base_cost: int):
-            "add to dest_costs and queue if better cost"
-            if self.board[x, y] & CLUTTER:
-                cost = base_cost + 2
-            else:
-                cost = base_cost + 1
-            if cost < dest_costs[x, y]:
-                dest_costs[x, y] = cost
-                queue.append(((x, y), cost))
-            return base_cost
+        #def inner(x: int, y: int, base_cost: int):
+        #    "add to dest_costs and queue if better cost"
+        #    if self.board[x, y] & CLUTTER:
+        #        cost = base_cost + 2
+        #    else:
+        #        cost = base_cost + 1
+        #    if cost < dest_costs[x, y]:
+        #        dest_costs[x, y] = cost
+        #        queue.append(((x, y), cost))
+        #    return base_cost
 
-        inner(*dest, 0)
+        #inner(*dest, 0)
 
         while queue:
             node, cost = queue.pop(0)
-            self.check_neighbors(node, inner, cost)
+            for n in self.get_neighbors(node):
+                
+                if self.board[n] & CLUTTER:
+                    n_cost = cost + 2
+                else:
+                    n_cost = cost + 1
+                if n_cost < dest_costs[n]:
+                    dest_costs[n] = n_cost
+                    queue.append((n, n_cost))
+            #self.check_neighbors(node, inner, cost)
         return dest_costs
 
     def line_of_sight(
@@ -967,14 +1004,16 @@ class MythicMischiefGame:
         seen = np.zeros((5, 5), np.bool_)
         queue = [(0, 0)]
 
-        def inner(x: int, y: int, _: int) -> int:
-            queue.append((x, y))
-            return 0
+        # def inner(x: int, y: int, _: int) -> int:
+        #     queue.append((x, y))
+        #     return 0
 
         while queue:
             pos = queue.pop(0)
             if not seen[pos]:
                 seen[pos] = True
-                self.check_neighbors(pos, inner, 0)
+                #self.check_neighbors(pos, inner, 0)
+                queue.extend(self.get_neighbors(pos))
+
         x = seen.all()
         return bool(x)
