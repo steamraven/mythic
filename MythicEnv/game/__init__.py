@@ -313,7 +313,7 @@ class MythicMischiefGame:
                     # Setup
                     # init: yield from self.place_mythics(players[0], True)
                     self.place_mythics = gamestate.place_mythics(players[0], True)
-                    action = None
+                    action = None  # init generator
                     self.step += 1
                 if self.step == 2:
                     # run: yield from self.place_mythics(players[0], True)
@@ -339,7 +339,7 @@ class MythicMischiefGame:
 
                     # init: yield from self.place_mythics(players[1], True)
                     self.place_mythics = gamestate.place_mythics(players[1], True)
-                    action = None
+                    action = None # init generator
                     self.step += 1
                 if self.step == 4:
                     # run: yield from self.place_mythics(players[1], True)
@@ -367,7 +367,7 @@ class MythicMischiefGame:
                             player = players[self.player]
                             # init: done, reward = yield from self.mythic_phase(player)
                             self.mythic_phase = gamestate.mythic_phase(player)
-                            action = None
+                            action = None # init generator
                             self.step += 1
         
                         if self.step == 7:
@@ -387,7 +387,7 @@ class MythicMischiefGame:
                             assert not player.occupying
                             #init: done, reward = yield from self.keeper_phase(player)
                             self.keeper_phase = gamestate.keeper_phase(player)
-                            action = None
+                            action = None # init generator
                             self.step += 1
                         if  self.step == 8:
                             # run: done, reward = yield from self.keeper_phase(player)
@@ -405,7 +405,7 @@ class MythicMischiefGame:
                             # init: yield from self.cleanup_phase(player)
                             self.cleanup_phase = gamestate.cleanup_phase(player)
                             self.step += 1
-                            action = None
+                            action = None # init generator
                         if self.step == 9:
                             # run: yield from self.cleanup_phase(player)
                             assert self.cleanup_phase
