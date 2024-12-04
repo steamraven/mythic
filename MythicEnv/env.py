@@ -294,146 +294,187 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         return BaseEnvTimestep(self.get_observation(), reward, True, meta)
 
     def get_observation(self) -> dict[str, Any]:
-        obs = np.zeros((23, 5, 5), np.float32)
+        obs = np.zeros((21, 5, 5), np.float32)
         game_state = self.game_state
         assert game_state
-        board = game_state.board
+        _board = game_state.board
 
-        def b(a: int):
-            return (board & a).astype(np.bool_)
+        # c:=c+1   =>  ++c (pre-increment)
+        c = -1
 
-        for i, d in enumerate(DEST):
-            a = board & d
-            obs[0 + i, b(d)] = 1
-        obs[3, b(KEEPER)] = 1
-        obs[4, b(CLUTTER)] = 1
-        obs[5, b(HORZ_WALL)] = 1
-        obs[6, b(VERT_WALL)] = 1
-        obs[7, b(BOOKS[0])] = 1
-        obs[8, b(PLAYER[0])] = 1
-        # obs[9, :, :] = 0  team1 after lunch
-        obs[10, b(BOOKS[1])] = 1
-        obs[11, b(PLAYER[1])] = 1
-        # obs[12] team3 after lunch
-        if self.available_action_type in [
-            ActionType.SELECT_SELF,
-            ActionType.SELECT_OPP,
-            ActionType.SELECT_MYTHIC,
-            ActionType.SELECT_DEST,
-            ActionType.SELECT_HORZ_WALL,
-            ActionType.SELECT_VERT_WALL,
-        ]:
-            for a in self.available_actions:
-                x, y = action_to_board(a)
-                obs[13, x, y] = 1
+        def board(a: int):
+            return (_board & a).astype(np.bool_)
 
-        # Player state (4 levels)
-        s = 14
-        for s, player in zip((14, 18), game_state.players):
+        for d in DEST:
+            obs[c:=c+1, board(d)] = 1
+        obs[c:=c+1, board(KEEPER)] = 1
+        obs[c:=c+1, board(CLUTTER)] = 1
+        obs[c:=c+1, board(HORZ_WALL)] = 1
+        obs[c:=c+1, board(VERT_WALL)] = 1
+        obs[c:=c+1, board(BOOKS[0])] = 1
+        obs[c:=c+1, board(PLAYER[0])] = 1
+        # obs[c:=c+1, :, :] = 0  team1 after lunch
+        obs[c:=c+1, board(BOOKS[1])] = 1
+        obs[c:=c+1, board(PLAYER[1])] = 1
+        # obs[c:=c+1] team3 after lunch
+
+
+        # Player state (each 4 levels)
+        # TODO: Swap players?
+        c=c+1
+        for player in game_state.players:
+
+            # (0,0) -> (0,4)
+            # TODO: Handle more than 4 teams
             team_id = self.team_ids[type(player.team)]
-            obs[s + team_id + 1, 0, 0] = 1
+            assert 0<=team_id<=3
+            obs[c + team_id, 0, 0] = 1
+
+            # 0 < Score <= 4
             score = player.score
             score1 = min(score, 4)
             if score1:
-                obs[s : s + score1, 0, 1] = 1
+                assert 1<=score1<=4
+                obs[c: c + score1, 0, 1] = 1
+            # 4 < score <= 8
             score2 = min(score - 4, 4)
             if score2 > 0:
-                obs[s : s + score1, 0, 2] = 1
+                assert 1<=score2<=4
+                obs[c: c + score2, 0, 2] = 1
             # score == 9 on game state channel
             # score >= 10 not counted as that is endgame
-            if self.available_action_phase == ActionPhase.BOOST:
-                obs[s : s + self.available_actions_left, 0, 3] = 1
-            if self.available_action_phase == ActionPhase.SPEND_TOME:
-                obs[s : s + self.available_actions_left, 0, 4] = 1
+
             # More action phases later and in game state channel
+            if self.available_action_phase == ActionPhase.BOOST:
+                assert 1<=self.available_actions_left <= 4
+                obs[c: c + self.available_actions_left, 0, 3] = 1
+            if self.available_action_phase == ActionPhase.SPEND_TOME:
+                assert 1<=self.available_actions_left <= 4
+                obs[c: c + self.available_actions_left, 0, 4] = 1
 
+            # (1,0) -> (1,4)
             if player.move_tomes:
-                obs[s : s + player.move_tomes, 1, 0] = 1
+                assert 1<=player.move_tomes<=4
+                obs[c: c + player.move_tomes, 1, 0] = 1
             if player.move_other_tomes:
-                obs[s : s + player.move_other_tomes, 1, 1] = 1
+                assert 1<=player.move_other_tomes<=4
+                obs[c: c + player.move_other_tomes, 1, 1] = 1
             if player.move_shelf_tomes:
-                obs[s : s + player.move_shelf_tomes, 1, 2] = 1
+                assert 1<=player.move_shelf_tomes<=4
+                obs[c: c + player.move_shelf_tomes, 1, 2] = 1
             if player.distract_tomes:
-                obs[s : s + player.distract_tomes, 1, 3] = 1
+                assert 1<=player.distract_tomes<=4
+                obs[c: c + player.distract_tomes, 1, 3] = 1
             if player.tomes:
-                obs[s : s + player.tomes, 1, 4] = 1
+                assert 1<=player.tomes<=4
+                obs[c: c + player.tomes, 1, 4] = 1
 
+            # (2,0) -> (2,4)
+            # 0 < moves <= 4
             moves = player.move
             moves1 = min(moves, 4)
             if moves1:
-                obs[s : s + moves1, 2, 0] = 1
-            # moves >4 < 9 see below [3,0]
+                assert 1<=moves1<=4
+                obs[c: c + moves1, 2, 0] = 1
+            # 4 < moves <= 8 see below [3,0]
             # moves == 9 is handled in game state channel
             if player.move_other:
-                obs[s : s + player.move_other, 2, 1] = 1
+                assert 1<=player.move_other<=4
+                obs[c: c + player.move_other, 2, 1] = 1
             if player.move_shelf:
-                obs[s : s + player.move_shelf, 2, 2] = 1
+                assert 1<=player.move_shelf<=4
+                obs[c: c + player.move_shelf, 2, 2] = 1
             if player.distract:
-                obs[s : s + player.distract, 2, 3] = 1
+                assert 1<=player.distract<=4
+                obs[c: c + player.distract, 2, 3] = 1
             if player.legendary:
-                obs[s : s + 1, 2, 4] = 1
+                obs[c, 2, 4] = 1
 
-            # 3,0 -> see moves above
+            # 3,0 -> (3,4)
+            # 4 < moves <= 8
             moves2 = min(player.move - 4, 4)
             if moves2 > 0:
-                obs[s : s + moves2, 3, 0] = 1
-            if self.available_action_phase == ActionPhase.MOVE_OPP:
-                obs[s : s + self.available_actions_left, 3, 1] = 1
-            if self.available_action_phase == ActionPhase.MOVE_HORZ_SHELF:
-                obs[s : s + self.available_actions_left, 3, 2] = 1
-            if self.available_action_phase == ActionPhase.DISTRACT:
-                obs[s : s + self.available_actions_left, 3, 3] = 1
-            if self.available_action_phase == ActionPhase.LEGENDARY:
-                obs[s : s + self.available_actions_left, 3, 4] = 1
+                assert 1<=moves2<=4
+                obs[c: c + moves2, 3, 0] = 1
+            # # 0 <= moves <= 4 see above [2,0]
+            # moves == 9 is handled in game state channel
 
+            # More action phases earlier and in game state channel
+            if self.available_action_phase == ActionPhase.MOVE_OPP:
+                assert 1<=self.available_actions_left<=4
+                obs[c: c + self.available_actions_left, 3, 1] = 1
+            if self.available_action_phase == ActionPhase.MOVE_HORZ_SHELF:
+                assert 1<=self.available_actions_left<=4
+                obs[c: c + self.available_actions_left, 3, 2] = 1
+            if self.available_action_phase == ActionPhase.DISTRACT:
+                assert 1<=self.available_actions_left<=4
+                obs[c: c + self.available_actions_left, 3, 3] = 1
+            if self.available_action_phase == ActionPhase.LEGENDARY:
+                assert 1<=self.available_actions_left<=4
+                obs[c: c + self.available_actions_left, 3, 4] = 1
+
+            # (4,0) -> (4,4)
             if self.available_action_phase == ActionPhase.MOVE:
-                obs[s : s + self.available_actions_left, 4, 0] = 1
+                obs[c: c + self.available_actions_left, 4, 0] = 1
             if self.available_action_phase == ActionPhase.PLACE_MYTHIC:
-                obs[s : s + self.available_actions_left, 4, 1] = 1
+                obs[c: c + self.available_actions_left, 4, 1] = 1
             if self.available_action_phase == ActionPhase.MOVE_VERT_SHELF:
-                obs[s : s + self.available_actions_left, 4, 2] = 1
+                obs[c: c + self.available_actions_left, 4, 2] = 1
             if self.available_action_phase == ActionPhase.AFTER_LUNCH:
-                obs[s : s + self.available_actions_left, 4, 3] = 1
+                obs[c: c + self.available_actions_left, 4, 3] = 1
 
             if player.after_lunch_special:
                 assert 1<=player.after_lunch_special<=4
-                obs[s : s + player.after_lunch, 4, 4] = 1
+                obs[c: c + player.after_lunch_special, 4, 4] = 1
 
+            c=c+4
+
+        # General Game State
+        # (0,0) -> (0,4)
         if game_state.after_lunch:
-            obs[22, 0, 0] = 1
+            obs[c, 0, 0] = 1
         if game_state.players[0].score == 9:
-            obs[22, 0, 1] = 1
+            obs[c, 0, 1] = 1
         if game_state.players[1].score == 9:
-            obs[22, 0, 2] = 1
+            obs[c, 0, 2] = 1
         if game_state.players[0].move == 9:
-            obs[22, 0, 3] = 1
+            obs[c, 0, 3] = 1
         if game_state.players[1].move == 9:
-            obs[22, 0, 4] = 1
+            obs[c, 0, 4] = 1
 
+        # (1,0) -> (1,4)
+        # Available Action Types on General Game State channel
+        # TODO: Split? We have extra space
         if self.available_action_type in (
             ActionType.SELECT_SELF,
             ActionType.SELECT_MYTHIC,
         ):
-            obs[22, 1, 0] = 1
+            obs[c, 1, 0] = 1
+        # TODO: Split?  We have extra space
         if self.available_action_type in (
             ActionType.SELECT_OPP,
             ActionType.SELECT_MYTHIC,
         ):
-            obs[22, 1, 1] = 1
+            obs[c, 1, 1] = 1
         if self.available_action_type == ActionType.SELECT_DEST:
-            obs[22, 1, 2] = 1
+            obs[c, 1, 2] = 1
         if self.available_action_type == ActionType.SELECT_HORZ_WALL:
-            obs[22, 1, 3] = 1
+            obs[c, 1, 3] = 1
         if self.available_action_type == ActionType.SELECT_VERT_WALL:
-            obs[22, 1, 4] = 1
+            obs[c, 1, 4] = 1
 
+        # (2,0) -> (2,4)
         if self.available_action_type == ActionType.SELECT_SKILL:
-            obs[22, 2, 0] = 1
+            obs[c, 2, 0] = 1
+        # Available Action Phases with more than one actions left are on player channels above.
+        # The ones here on General Game State channel have 1 or unknown actions left
         if self.available_action_phase == ActionPhase.MOVE_KEEPER:
-            obs[22, 2, 1] = 1
+            obs[c, 2, 1] = 1
         if self.available_action_phase == ActionPhase.DECAY_MOVE:
-            obs[22, 2, 2] = 1
+            obs[c, 2, 2] = 1
 
+        # (3,0) -> (4,4)
+        # Non-Position Available Actions on general game state channel
         mapping: dict[int, tuple[int, int]] = {
             Action.PASS: (3, 0),
             Action.MOVE: (3, 1),
@@ -445,11 +486,32 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
         }
         for action in self.available_actions:
             if action in mapping:
-                obs[22, mapping[action]] = 1
+                obs[c, mapping[action]] = 1
 
+        # Available Action positions as separate channel
+        c=c+1
+        if self.available_action_type in [
+            ActionType.SELECT_SELF,
+            ActionType.SELECT_OPP,
+            ActionType.SELECT_MYTHIC,
+            ActionType.SELECT_DEST,
+            ActionType.SELECT_HORZ_WALL,
+            ActionType.SELECT_VERT_WALL,
+        ]:
+            for a in self.available_actions:
+                x, y = action_to_board(a)
+                obs[c, x, y] = 1
+
+
+        assert c == 20
+        assert obs.shape==(21,5,5)
+
+        # Action Mask
         action_mask = np.zeros(ACTION_SPACE_LEN, "int8")
         for i in self.available_actions:
             action_mask[i] = 1
+        assert action_mask.shape==(33,)
+
         return {
             'observation': obs,
             'action_mask': action_mask,
