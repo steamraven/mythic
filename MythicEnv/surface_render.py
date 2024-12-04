@@ -328,7 +328,7 @@ class MythicMischiefRenderable(Renderable):
                     self.attr_box(
                         player_id,
                         color,
-                        lambda player: f"(7) After Lunch({player.team.data.after_lunch_attr}): {player.after_lunch}",
+                        lambda player: f"(7) After Lunch({player.team.data.after_lunch_attr}): {player.after_lunch_special}",
                         action=7,
                     ),
                     self.attr_box(

@@ -395,7 +395,8 @@ class MythicMischiefEnv(PlayableEnv[np.int8, np.int64]):
             if self.available_action_phase == ActionPhase.AFTER_LUNCH:
                 obs[s : s + self.available_actions_left, 4, 3] = 1
 
-            if player.after_lunch:
+            if player.after_lunch_special:
+                assert 1<=player.after_lunch_special<=4
                 obs[s : s + player.after_lunch, 4, 4] = 1
 
         if game_state.after_lunch:

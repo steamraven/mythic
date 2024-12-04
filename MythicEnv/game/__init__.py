@@ -146,7 +146,7 @@ class Player:
         self.distract = team.data.distract_skill_costs[0]
         self.distract_tomes = 0
         self.legendary = 1
-        self.after_lunch = 0
+        self.after_lunch_special = 0
         self.tomes = 0
         self.score = 0
         self.occupying = None
@@ -169,7 +169,7 @@ class Player:
     distract_tomes: int
 
     legendary: int
-    after_lunch: int
+    after_lunch_special: int
 
     tomes: int
     score: int
