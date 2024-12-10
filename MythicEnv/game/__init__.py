@@ -203,12 +203,6 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
     @abc.abstractmethod
     def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
         ...
-    @staticmethod
-    def yield_(value: T_Yield):
-        return Yield[T_Yield](value)
-    @staticmethod
-    def return_(value: T_Return):
-        return Return[T_Return](value)
     def as_generator(self)-> Generator[T_Yield, T_Send, T_Return]:
         v = None
         while True:
@@ -219,7 +213,9 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
                 return y_or_r.value
 
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
+PlayGenerator_Return = Yield[PlayYield] | Return[None]
 PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
+PlayOrDoneGenerator_Return = Yield[PlayYield] | Return[tuple[bool, int]]
 PlaySkill_ = Callable[[Player], PlayOrDoneGenerator]
 
 
@@ -298,7 +294,7 @@ class MythicMischiefGame:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
         class PlayState(PlayOrDoneGenerator):
             gamestate: MythicMischiefGame
-            def send(self, value: Optional[int]):
+            def send(self, value: Optional[int]) -> PlayOrDoneGenerator_Return:
                 gamestate = self.gamestate
                 action = value
                 # players = self.players
@@ -320,7 +316,7 @@ class MythicMischiefGame:
                     assert self.place_mythics
                     y_or_r = self.place_mythics.send(action)
                     if isinstance(y_or_r, Yield):
-                        return self.yield_(y_or_r.value)
+                        return Yield(y_or_r.value)
                     # Player 2 gets a tome, but does not affect start boost
                     # start_boost = players[1].move_shelf
                     self.start_boost = players[1].move_shelf
@@ -333,7 +329,7 @@ class MythicMischiefGame:
                     assert self.spend_tomes
                     y_or_r = self.spend_tomes.send(action)
                     if isinstance(y_or_r, Yield):
-                        return self.yield_(y_or_r.value)
+                        return Yield(y_or_r.value)
                     # players[1].move_shelf = start_boost
                     players[1].move_shelf = self.start_boost
 
@@ -346,7 +342,7 @@ class MythicMischiefGame:
                     assert self.place_mythics
                     y_or_r = self.place_mythics.send(action)
                     if isinstance(y_or_r, Yield):
-                        return self.yield_(y_or_r.value)
+                        return Yield(y_or_r.value)
                     self.step += 1
                 # Main loop 
                 while True:
@@ -377,11 +373,11 @@ class MythicMischiefGame:
                             reward: int
                             y_or_r = self.mythic_phase.send(action)
                             if isinstance(y_or_r, Yield):
-                                return self.yield_(y_or_r.value)
+                                return Yield(y_or_r.value)
                             done, reward = y_or_r.value
                             if done:
                                 #return done, reward
-                                return self.return_((done,reward))
+                                return Return((done,reward))
                             
                             player = players[self.player]
                             assert not player.occupying
@@ -395,12 +391,12 @@ class MythicMischiefGame:
                             done: bool
                             reward: int
                             try:
-                                return self.yield_(self.keeper_phase.send(action))
+                                return Yield(self.keeper_phase.send(action))
                             except StopIteration as e:
                                 done, reward = e.value
                             if done:
                                 #return done, reward
-                                return self.return_((done, reward))
+                                return Return((done, reward))
                             player = players[self.player]
                             # init: yield from self.cleanup_phase(player)
                             self.cleanup_phase = gamestate.cleanup_phase(player)
@@ -410,7 +406,7 @@ class MythicMischiefGame:
                             # run: yield from self.cleanup_phase(player)
                             assert self.cleanup_phase
                             try:
-                                return self.yield_(self.cleanup_phase.send(action))
+                                return Yield(self.cleanup_phase.send(action))
                             except StopIteration :
                                 pass
                             self.player += 1
@@ -470,7 +466,7 @@ class MythicMischiefGame:
 
                         self.step += 1
                         # action = yield PlayYield(
-                        return self.yield_(
+                        return Yield(
                             PlayYield(
                                 self.player.id_,
                                 ActionPhase.PLACE_MYTHIC,
@@ -486,7 +482,7 @@ class MythicMischiefGame:
                         self.player.mythics.add(pos)
                         self.step = 1 # Restart for loop
                         continue
-                return self.return_(None)
+                return Return(None)
 
         state = PlaceMythicsState()
         state.gamestate = self
@@ -535,7 +531,7 @@ class MythicMischiefGame:
                             available.append(Action.LEGENDARY)
                         self.step += 1
                         # action = yield PlayYield(
-                        return self.yield_(
+                        return Yield(
                             PlayYield(
                                 player.id_,
                                 ActionPhase.SPEND_TOME,
@@ -562,7 +558,7 @@ class MythicMischiefGame:
                         gamestate.reset_skills(player)
                         self.step = 1
                         continue # Resume for loop
-                return self.return_(None)
+                return Return(None)
 
         state = SpendTomesState()
         state.gamestate = self
@@ -574,7 +570,7 @@ class MythicMischiefGame:
         class MythicPhaseState( PlayOrDoneGenerator):
             gamestate: MythicMischiefGame
             player: Player
-            def send(self, value: int | None) :
+            def send(self, value: int | None) -> PlayOrDoneGenerator_Return:
                 action = value
                 gamestate = self.gamestate
                 player = self.player
@@ -595,7 +591,7 @@ class MythicMischiefGame:
                     # run: yield from self.place_mythics(player, False)
                     y_or_r = self.place_mythics.send(action)
                     if isinstance(y_or_r, Yield):
-                        return self.yield_(y_or_r.value)
+                        return Yield(y_or_r.value)
                     self.step += 1
                 
                 # TODO: all skills/abilities
@@ -615,11 +611,11 @@ class MythicMischiefGame:
                     if self.step == 5:
                         # run: yield from self.play_move(player)                            
                         try:
-                            return self.yield_(self.play_move.send(action))
+                            return Yield(self.play_move.send(action))
                         except StopIteration as e:
                             done, reward = e.value
                         if done:
-                            return self.return_((done,reward))
+                            return Return((done,reward))
                         self.step = 3
                         # Try more actions
                         continue
@@ -640,14 +636,14 @@ class MythicMischiefGame:
 
                         self.step += 1
                         # action = yield PlayYield(
-                        return self.yield_(PlayYield(
+                        return Yield(PlayYield(
                            player.id_, ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, available
                         ))
                     if self.step == 6:
                         assert action is not None
                         if action == Action.PASS:
                             #return False, 0
-                            return self.return_((False, 0))
+                            return Return((False, 0))
                         # init: done, reward = yield from skill_coroutines[action]
                         self.skill_coroutine = self.skill_coroutines[action]
                         self.step += 1    
@@ -655,12 +651,12 @@ class MythicMischiefGame:
                         assert action is not None
                         # run: done, reward = yield from skill_coroutines[action]
                         try:
-                            return self.yield_(self.skill_coroutine.send(action))
+                            return Yield(self.skill_coroutine.send(action))
                         except StopIteration as e:
                             done, reward = e.value
                         if done:
                             # return done, reward
-                            return self.return_((done, reward))
+                            return Return((done, reward))
                         self.step = 3
                         continue
 
