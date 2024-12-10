@@ -439,9 +439,9 @@ class MythicMischiefGame:
 
     def start_play(self) -> PlayOrDoneGenerator:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
-        class PlayState(PlayOrDoneGenerator):
+        class PlayState(PlayOrDoneGeneratorImpl):
             gamestate: MythicMischiefGame
-            def send(self, value: Optional[int]) -> PlayOrDoneGenerator_Return:
+            def send_impl(self, value: Optional[int]):
                 gamestate = self.gamestate
                 action = value
                 # players = self.players
@@ -454,111 +454,45 @@ class MythicMischiefGame:
 
                 if self.step == 1:
                     # Setup
-                    # init: yield from self.place_mythics(players[0], True)
-                    self.place_mythics = gamestate.place_mythics(players[0], True)
-                    action = None  # init generator
-                    self.step += 1
+                    # yield from self.place_mythics(players[0], True)
+                    return YieldFrom(gamestate.place_mythics(players[0], True))
                 if self.step == 2:
-                    # run: yield from self.place_mythics(players[0], True)
-                    assert self.place_mythics
-                    y_or_r = self.place_mythics.send(action)
-                    if isinstance(y_or_r, Yield):
-                        return Yield(y_or_r.value)
                     # Player 2 gets a tome, but does not affect start boost
                     # start_boost = players[1].move_shelf
                     self.start_boost = players[1].move_shelf
-                    # init: yield from self.spend_tomes(players[1])
-                    self.spend_tomes = gamestate.spend_tomes(players[1])
-                    action = None
-                    self.step += 1                    
+                    # yield from self.spend_tomes(players[1])
+                    return YieldFrom(gamestate.spend_tomes(players[1]))
                 if self.step == 3:
-                    # run: yield from self.spend_tomes(players[1])
-                    assert self.spend_tomes
-                    y_or_r = self.spend_tomes.send(action)
-                    if isinstance(y_or_r, Yield):
-                        return Yield(y_or_r.value)
                     # players[1].move_shelf = start_boost
                     players[1].move_shelf = self.start_boost
 
-                    # init: yield from self.place_mythics(players[1], True)
-                    self.place_mythics = gamestate.place_mythics(players[1], True)
-                    action = None # init generator
-                    self.step += 1
-                if self.step == 4:
-                    # run: yield from self.place_mythics(players[1], True)
-                    assert self.place_mythics
-                    y_or_r = self.place_mythics.send(action)
-                    if isinstance(y_or_r, Yield):
-                        return Yield(y_or_r.value)
-                    self.step += 1
+                    # yield from self.place_mythics(players[1], True)
+                    return YieldFrom(gamestate.place_mythics(players[1], True))
                 # Main loop 
-                while True:
-                    assert 5 <= self.step <= 9
-                    # for player in players:
-                    if self.step == 5:
-                        # Use index instead of an iterator
-                        self.player = 0
-                        self.step += 1
+                while self.while_loop(True, 4, 10 ):
 
-                    while True:  # for loop
-                        assert 6 <= self.step <= 9
+                    for player in self.for_loop(players, 5, 9):
                         if self.step == 6:          
-                            # check for loop
-                            if self.player == len(players):
-                                self.step = 5 # End for loop
-                                break                   
-                            player = players[self.player]
-                            # init: done, reward = yield from self.mythic_phase(player)
-                            self.mythic_phase = gamestate.mythic_phase(player)
-                            action = None # init generator
-                            self.step += 1
+                            # done, reward = yield from self.mythic_phase(player)
+                            return YieldFrom(gamestate.mythic_phase(player))
         
                         if self.step == 7:
-                            # run: done, reward = yield from self.mythic_phase(player)
-                            assert self.mythic_phase
-                            done: bool
-                            reward: int
-                            y_or_r = self.mythic_phase.send(action)
-                            if isinstance(y_or_r, Yield):
-                                return Yield(y_or_r.value)
-                            done, reward = y_or_r.value
+                            done, reward = self.yield_from_result
                             if done:
                                 #return done, reward
                                 return Return((done,reward))
-                            
-                            player = players[self.player]
                             assert not player.occupying
-                            #init: done, reward = yield from self.keeper_phase(player)
-                            self.keeper_phase = gamestate.keeper_phase(player)
-                            action = None # init generator
-                            self.step += 1
+                            # done, reward = yield from self.keeper_phase(player)
+                            return YieldFrom(gamestate.keeper_phase(player))
                         if  self.step == 8:
-                            # run: done, reward = yield from self.keeper_phase(player)
-                            assert self.keeper_phase
-                            done: bool
-                            reward: int
-                            try:
-                                return Yield(self.keeper_phase.send(action))
-                            except StopIteration as e:
-                                done, reward = e.value
+                            done, reward = self.yield_from_result
                             if done:
                                 #return done, reward
                                 return Return((done, reward))
-                            player = players[self.player]
-                            # init: yield from self.cleanup_phase(player)
-                            self.cleanup_phase = gamestate.cleanup_phase(player)
-                            self.step += 1
-                            action = None # init generator
-                        if self.step == 9:
-                            # run: yield from self.cleanup_phase(player)
-                            assert self.cleanup_phase
-                            try:
-                                return Yield(self.cleanup_phase.send(action))
-                            except StopIteration :
-                                pass
-                            self.player += 1
-                            self.step = 6 #restart for loop
-                            continue
+
+                            # yield from self.cleanup_phase(player)
+                            return YieldFrom(gamestate.cleanup_phase(player))
+                assert False
                 
         state = PlayState()
         # Deepcopy will only copy once
