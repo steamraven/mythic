@@ -635,10 +635,10 @@ class MythicMischiefGame:
 
     def mythic_phase(self, player: Player) -> PlayOrDoneGenerator:
         """Phase where actions are performed by the mythics"""
-        class MythicPhaseState( PlayOrDoneGenerator):
+        class MythicPhaseState( PlayOrDoneGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
-            def send(self, value: int | None) -> PlayOrDoneGenerator_Return:
+            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
                 action = value
                 gamestate = self.gamestate
                 player = self.player
@@ -651,50 +651,36 @@ class MythicMischiefGame:
                     assert action is not None
 
                 if self.step == 1:
-                    # init: yield from self.place_mythics(player, False)
-                    self.place_mythics = gamestate.place_mythics(player, False)
-                    action = None # init generator
-                    self.step += 1
-                if self.step == 2:
-                    # run: yield from self.place_mythics(player, False)
-                    y_or_r = self.place_mythics.send(action)
-                    if isinstance(y_or_r, Yield):
-                        return Yield(y_or_r.value)
-                    self.step += 1
-                
+                    # yield from self.place_mythics(player, False)
+                    return YieldFrom(gamestate.place_mythics(player, False))                
                 # TODO: all skills/abilities
-                while True:
+                while self.while_loop(True, 2, 8):
                     if self.step == 3:
-                        if player.occupying:
-                            self.step = 4
+                        if player.occupying:    
+                            # Cannot stop movement on another players space.  Or activate other actins
+                            # yield from self.play_move(player)
+                            return YieldFrom(gamestate.play_move(player))
                         else:
-                            self.step = 6
+                            self.step = 5
                     if self.step == 4:
-                        # if player.occupying:
-                        # Cannot stop movement on another players space.  Or activate other actins
-                        # init: yield from self.play_move(player)
-                        self.play_move = gamestate.play_move(player)
-                        action = None
-                        self.step += 1
-                    if self.step == 5:
-                        # run: yield from self.play_move(player)                            
-                        try:
-                            return Yield(self.play_move.send(action))
-                        except StopIteration as e:
-                            done, reward = e.value
+                        done, reward = self.yield_from_result
                         if done:
                             return Return((done,reward))
-                        self.step = 3
                         # Try more actions
                         continue
             
-                    if self.step == 6:
+                    if self.step == 5:
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
-                        self.skill_coroutines = dict[int, PlayOrDoneCoroutine]()
+                        self.skill_coroutines = dict[int, PlayOrDoneCoroutine| PlayOrDoneGenerator]()
                         for skill in gamestate.player_skills[player.id_]:
                             coroutine = skill(player)
-                            y = next(coroutine)
+                            if isinstance(coroutine, ClonableGenerator):
+                                y_or_d = coroutine.send(None)
+                                assert isinstance(y_or_d, Yield)
+                                y = y_or_d.value
+                            else:
+                                y = next(coroutine)
                             assert y.to_play == player.id_
                             for a in y.available_actions:
                                 assert a not in self.skill_coroutines
@@ -711,21 +697,15 @@ class MythicMischiefGame:
                         if action == Action.PASS:
                             #return False, 0
                             return Return((False, 0))
-                        # init: done, reward = yield from skill_coroutines[action]
-                        self.skill_coroutine = self.skill_coroutines[action]
-                        self.step += 1    
+                        #done, reward = yield from skill_coroutines[action]
+                        return YieldFrom(self.skill_coroutines[action])
+ 
                     if self.step == 7:
-                        assert action is not None
-                        # run: done, reward = yield from skill_coroutines[action]
-                        try:
-                            return Yield(self.skill_coroutine.send(action))
-                        except StopIteration as e:
-                            done, reward = e.value
+                        done, reward = self.yield_from_result
                         if done:
                             # return done, reward
                             return Return((done, reward))
-                        self.step = 3
-                        continue
+                assert False
 
         state = MythicPhaseState()
         state.gamestate = self
