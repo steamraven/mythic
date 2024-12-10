@@ -502,11 +502,11 @@ class MythicMischiefGame:
 
     def place_mythics(self, player: Player, anywhere: bool) -> PlayGenerator:
         """Place available mythics in spot in an available spot"""
-        class PlaceMythicsState(PlayGenerator):
+        class PlaceMythicsState(PlayGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
             anywhere: bool
-            def send(self, value: Optional[int]):
+            def send_impl(self, value: Optional[int]):
                 gamestate = self.gamestate
                 action = value
                 any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
@@ -521,12 +521,8 @@ class MythicMischiefGame:
                     assert action is not None
                     
                 # while len(player.mythics) < 3:
-                while True:
-                    if self.step == 1:
-                        # Check loop condition
-                        if not (len(self.player.mythics) < 3):
-                            self.step = 3
-                            break
+                while self.while_loop(lambda: len(self.player.mythics)<3, 1, 4):
+                    if self.step == 2:
                         available = []  # to make typechecker happy
                         if not self.anywhere:
                             available = [
@@ -545,7 +541,6 @@ class MythicMischiefGame:
                                 if not (gamestate.board[x, y] & any_mask)
                             ]
 
-                        self.step += 1
                         # action = yield PlayYield(
                         return Yield(
                             PlayYield(
@@ -556,13 +551,11 @@ class MythicMischiefGame:
                                 [board_to_action(x, y) for x, y in available],
                             )
                         )
-                    if self.step == 2:
+                    if self.step == 3:
                         assert action is not None
                         pos = action_to_board(action)
                         gamestate.board[pos] |= PLAYER[self.player.id_]
                         self.player.mythics.add(pos)
-                        self.step = 1 # Restart for loop
-                        continue
                 return Return(None)
 
         state = PlaceMythicsState()
