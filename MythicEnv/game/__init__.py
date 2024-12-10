@@ -8,7 +8,7 @@ import abc
 import copy
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Callable, Generator, Generic, Optional, TypeVar
+from typing import Any, Callable, Generator, Generic, Iterable, Iterator, Optional, TypeVar
 from MythicEnv import *
 from MythicEnv.data import *
 
@@ -182,12 +182,13 @@ class Player:
 PlayCoroutine = Generator[PlayYield, int, None]
 # Play Coroutine that can end game
 PlayOrDoneCoroutine = Generator[PlayYield, int, tuple[bool, int]]
-PlaySkill = Callable[[Player], PlayOrDoneCoroutine]
 
 T_Yield = TypeVar("T_Yield")
 T_Return = TypeVar("T_Return")
 T_Send = TypeVar("T_Send")
-
+T = TypeVar("T")
+S = TypeVar("S")
+NIL = object()
 @dataclass
 class Yield(Generic[T_Yield]):
     value: T_Yield
@@ -212,13 +213,159 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
             else:
                 return y_or_r.value
 
+@dataclass
+class YieldFrom(Generic[T_Yield, T_Send, T_Return]):
+    gen: ClonableGenerator[T_Yield, T_Send, T_Return] | Generator[T_Yield, T_Send, T_Return] 
+class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
+    _yield_from: YieldFrom[T_Yield, T_Send, Any] | None
+    yield_from_result: Any
+    _for_loop: dict[int, tuple[Iterator[Any], Any]]
+    _while_loop: set[int]
+
+    def __init__(self):
+        self._yield_from = None
+        self.next_auto_step = 0
+
+
+    @abc.abstractmethod
+    def send_impl(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] | YieldFrom[T_Yield, T_Send, Any] | Generator[T_Yield, T_Send, Any]:
+        ...
+    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
+        while True:
+            if self._yield_from is None:
+                if hasattr(self, "_while_loop"):
+                    self._while_loop.clear()
+                s = self.send_impl(value)
+                value = None
+                if isinstance(s, (Yield, Return)):
+                    self.step += 1
+                    return s
+                if isinstance(s, YieldFrom):
+                    self._yield_from = s
+            if self._yield_from is not None:
+                if isinstance(self._yield_from.gen, ClonableGenerator):
+                    y_or_r = self._yield_from.gen.send(value)
+                    if isinstance(y_or_r, Yield):
+                        return y_or_r
+                    self.yield_from_result = y_or_r.value
+                else:
+                    try:
+                        if value is None:
+                            return Yield(next(self._yield_from.gen))
+                        else:
+                            return Yield(self._yield_from.gen.send(value))
+                    except StopIteration as e:
+                        self.yield_from_result = e.value
+                self.step += 1
+                self._yield_from = None
+                value = None
+    
+
+    def for_loop(self, i: Iterable[T], start_step: int, end_step: int) -> Iterator[T]:
+        # this gets called once for each send_impl.  It sets up its own 
+        # iterator to keep track of state
+        # The inner iterater starts with returning whatever the base_it
+        # returned last.  This way, each call through send_impl gets the 
+        # same value.  Only increments base_it if it is looped more than once
+        # in a single send_impl call
+
+        # _for_loop isn't created unless it is needed
+        try:
+            fl = self._for_loop
+        except AttributeError:
+            fl = self._for_loop = {}
+
+        # # auto_step logic
+        # start_step = self.next_auto_step
+        # self.next_auto_step += 1
+        if self.step == start_step:
+            base_it = iter(i)
+
+            # We can't increment iterator here. We want to do that within the
+            # inner iterator, so StopIteration is handled corrctly
+            start_value = NIL  # use marker as start_value may me None
+            fl[start_step] = (base_it, start_value)
+            
+        
+        # the _for_loop holds state across send_impl.  Uses start_step as a unique
+        # value
+        base_it, start_value =  fl[start_step]
+        outer = self
+        class inner_it(Iterator[S]):
+            def __init__(self):
+                #self.end_step = None
+                self.first_run = True
+
+            def __next__(self):
+                assert start_step <= outer.step <= end_step
+                if self.first_run:
+                    # First run always returns the last value from base_it
+                    self.first_run = False
+                    if start_value is not NIL:
+                        return start_value
+                # else:
+                #     # auto detect last step
+                #     if self.end_step is None:
+                #         self.end_step = outer.next_auto_step
+                
+                try:
+                    next_value = next(base_it)
+                except StopIteration:
+                    #assert start_value is not NIL, "Base iterator immediately returned StopIteration. Cannot detect end step"
+                    #assert self.end_step is not None
+                    #outer.step = self.end_step # set step state to end of loop
+                    outer.step = end_step + 1 # set step state to end of loop
+                    raise
+
+                # save across send_impl. This will be returned in the next send_impl
+                outer._for_loop[start_step] = (base_it, next_value)                
+                outer.step = start_step + 1  # the loop starts at the beginning
+                return next_value
+
+            def __iter__(self):
+                return self
+        return inner_it[T]()
+
+    def while_loop(self, condition: bool | Callable[[], bool], start_step: int, end_step: int):
+        
+        try:
+            wl = self._while_loop
+        except AttributeError:
+            wl = self._while_loop = set()
+
+        if self.step == start_step:
+            wl.add(start_step)
+
+        if start_step in wl:
+            if isinstance(condition, Callable):
+                condition = condition()
+            if condition:
+                self.step = start_step + 1
+            else:
+                self.step = end_step + 1
+            return condition
+        else:
+            wl.add(start_step)
+            if self.step <= end_step:
+                assert self.step > start_step
+                return True
+            return False
+
+
+
+
+
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
 PlayGenerator_Return = Yield[PlayYield] | Return[None]
 PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
 PlayOrDoneGenerator_Return = Yield[PlayYield] | Return[tuple[bool, int]]
 PlaySkill_ = Callable[[Player], PlayOrDoneGenerator]
+PlayGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, None]
+PlayGeneratorImpl_Return = Yield[PlayYield] | Return[None] | YieldFrom[PlayYield, int, Any] | Generator[PlayYield, int, Any]
+PlayOrDoneGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, tuple[bool, int]]
+PlayOrDoneGeneratorImpl_Return =  Yield[PlayYield] |  Return[tuple[bool,int]] | YieldFrom[PlayYield, int, Any] | Generator[PlayYield, int, Any]
 
-
+PlaySkill = Callable[[Player], PlayOrDoneCoroutine| PlayOrDoneGenerator] 
 class Team(abc.ABC):
     """Team specific info"""
 
