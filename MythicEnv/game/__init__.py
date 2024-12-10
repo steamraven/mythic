@@ -567,10 +567,10 @@ class MythicMischiefGame:
     def spend_tomes(self, player: Player) -> PlayGenerator:
         """Spend all collected tomes on skills"""
 
-        class SpendTomesState(PlayGenerator):
+        class SpendTomesState(PlayGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
-            def send(self, value: Optional[int]):
+            def send_impl(self, value: Optional[int]):
                 action = value
                 gamestate = self.gamestate
                 player = self.player
@@ -586,11 +586,8 @@ class MythicMischiefGame:
                     assert action is not None
 
                 # while player.tomes:
-                while True:
-                    if self.step == 1:
-                        if not player.tomes:
-                            self.step = 3
-                            break
+                while self.while_loop(lambda: bool(player.tomes), 1,4):
+                    if self.step == 2:
                         available = list[int]()
                         if player.move_tomes < 3:
                             available.append(Action.MOVE)
@@ -603,7 +600,6 @@ class MythicMischiefGame:
                             available.append(Action.DISTRACT)
                         if player.legendary < 1:
                             available.append(Action.LEGENDARY)
-                        self.step += 1
                         # action = yield PlayYield(
                         return Yield(
                             PlayYield(
@@ -615,7 +611,7 @@ class MythicMischiefGame:
                             )
                         )
                     
-                    if self.step == 2:
+                    if self.step == 3:
                         assert action is not None
                         player.tomes -= 1
                         if action == Action.MOVE:
@@ -630,8 +626,6 @@ class MythicMischiefGame:
                             player.legendary = 1
                         # TODO: Is this needed maybe move out
                         gamestate.reset_skills(player)
-                        self.step = 1
-                        continue # Resume for loop
                 return Return(None)
 
         state = SpendTomesState()
