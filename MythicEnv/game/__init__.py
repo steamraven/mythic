@@ -424,13 +424,13 @@ class MythicMischiefGame:
         )
 
         self.player_skills = [
-            {
-                Action.MOVE: self.play_move,
-                Action.MOVE_OTHER: player.team.play_move_other,
-                Action.MOVE_HORZ_SHELF: player.team.play_move_horz_shelf,
-                Action.MOVE_VERT_SHELF: player.team.play_move_vert_shelf,
-                Action.DISTRACT: self.play_distract,
-            }
+            [
+                self.play_move,
+                player.team.play_move_other,
+                player.team.play_move_horz_shelf,
+                player.team.play_move_vert_shelf,
+                self.play_distract,
+            ]
             for player in self.players
         ]
 
@@ -770,15 +770,14 @@ class MythicMischiefGame:
                     if self.step == 6:
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
-                        skills = gamestate.player_skills[player.id_]
-                        self.skill_coroutines: dict[int, PlayOrDoneCoroutine] = {
-                            a: skill(player) for a, skill in skills.items()
-                        }
-
-                        for a, r in self.skill_coroutines.items():
-                            y = next(r)
+                        self.skill_coroutines = dict[int, PlayOrDoneCoroutine]()
+                        for skill in gamestate.player_skills[player.id_]:
+                            coroutine = skill(player)
+                            y = next(coroutine)
                             assert y.to_play == player.id_
-                            assert len(y.available_actions) == 0 or y.available_actions == [a]
+                            for a in y.available_actions:
+                                assert a not in self.skill_coroutines
+                                self.skill_coroutines[a] = coroutine
                             available.extend(y.available_actions)
 
                         self.step += 1
