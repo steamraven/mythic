@@ -537,35 +537,35 @@ class MythicMischiefGame:
                 # players = self.players
                 players = gamestate.players
 
-                if self.step == 0:
+                if self.next_step():
                     # init
                     assert action is None
-                    self.step += 1
+                    self.complete_step()
 
-                if self.step == 1:
+                if self.next_step():
                     # Setup
                     # yield from self.place_mythics(players[0], True)
                     return YieldFrom(gamestate.place_mythics(players[0], True))
-                if self.step == 2:
+                if self.next_step():
                     # Player 2 gets a tome, but does not affect start boost
                     # start_boost = players[1].move_shelf
                     self.start_boost = players[1].move_shelf
                     # yield from self.spend_tomes(players[1])
                     return YieldFrom(gamestate.spend_tomes(players[1]))
-                if self.step == 3:
+                if self.next_step():
                     # players[1].move_shelf = start_boost
                     players[1].move_shelf = self.start_boost
 
                     # yield from self.place_mythics(players[1], True)
                     return YieldFrom(gamestate.place_mythics(players[1], True))
                 # Main loop 
-                for _ in self.while_loop(True, 4, 10 ):
-                    for player in self.for_loop(players, 5, 9):
-                        if self.step == 6:          
+                for _ in self.while_loop(True):
+                    for player in self.for_loop(players):
+                        if self.next_step():          
                             # done, reward = yield from self.mythic_phase(player)
                             return YieldFrom(gamestate.mythic_phase(player))
         
-                        if self.step == 7:
+                        if self.next_step():
                             done, reward = self.yield_from_result
                             if done:
                                 #return done, reward
@@ -573,7 +573,7 @@ class MythicMischiefGame:
                             assert not player.occupying
                             # done, reward = yield from self.keeper_phase(player)
                             return YieldFrom(gamestate.keeper_phase(player))
-                        if  self.step == 8:
+                        if  self.next_step():
                             done, reward = self.yield_from_result
                             if done:
                                 #return done, reward
