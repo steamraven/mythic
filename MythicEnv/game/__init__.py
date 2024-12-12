@@ -8,7 +8,7 @@ import abc
 import copy
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Callable, Generator, Generic, Iterable, Iterator, Optional, TypeVar
+from typing import Any, Callable, Generator, Generic, Iterable, Iterator, Optional, TypeVar, cast
 from MythicEnv import *
 from MythicEnv.data import *
 
@@ -188,7 +188,9 @@ T_Return = TypeVar("T_Return")
 T_Send = TypeVar("T_Send")
 T = TypeVar("T")
 S = TypeVar("S")
-NIL = object()
+class NIL:
+    pass
+Nil = NIL()
 @dataclass
 class Yield(Generic[T_Yield]):
     value: T_Yield
@@ -196,6 +198,9 @@ class Yield(Generic[T_Yield]):
 @dataclass
 class Return(Generic[T_Return]):
     value: T_Return
+
+class Break:
+    pass
 
 @dataclass
 class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
@@ -216,11 +221,24 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
 @dataclass
 class YieldFrom(Generic[T_Yield, T_Send, T_Return]):
     gen: ClonableGenerator[T_Yield, T_Send, T_Return] | Generator[T_Yield, T_Send, T_Return] 
+
+class LoopState:
+    end_step: Optional[int] = None
+@dataclass
+class ForLoopState(LoopState, Generic[T]):
+    base_it: Iterator[T]
+    start_value: T | NIL = Nil
+@dataclass
+class WhileLoopState(LoopState):
+    start_value: bool = False
+class LoopStateContainer(NamedTuple):
+    by_step: dict[int, LoopState]
+    stack: list[LoopState]
+
 class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
     _yield_from: YieldFrom[T_Yield, T_Send, Any] | None
     yield_from_result: Any
-    _for_loop: dict[int, tuple[Iterator[Any], Any]]
-    _while_loop: set[int]
+    loop_state: LoopStateContainer
 
     def __init__(self):
         self._yield_from = None
@@ -233,15 +251,21 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
     def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
         while True:
             if self._yield_from is None:
-                if hasattr(self, "_while_loop"):
-                    self._while_loop.clear()
+                # Auto step starts afresh each send
+                self.next_auto_step = 0 
+
                 s = self.send_impl(value)
                 value = None
                 if isinstance(s, (Yield, Return)):
-                    self.step += 1
+                    self.complete_step()
                     return s
                 if isinstance(s, YieldFrom):
                     self._yield_from = s
+                if isinstance(s, Break):
+                    self.complete_step()
+                    # notify loop that it is done
+                    self.loop_state.stack.pop(-1).end_step = self.step
+                    continue
             if self._yield_from is not None:
                 if isinstance(self._yield_from.gen, ClonableGenerator):
                     y_or_r = self._yield_from.gen.send(value)
@@ -256,12 +280,27 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                             return Yield(self._yield_from.gen.send(value))
                     except StopIteration as e:
                         self.yield_from_result = e.value
-                self.step += 1
+                self.complete_step()
                 self._yield_from = None
                 value = None
     
-
-    def for_loop(self, i: Iterable[T], start_step: int, end_step: int) -> Iterator[T]:
+    def next_step(self, custom_step: Optional[int] = None) -> bool:
+        "Check step condition"
+        # next_auto_step gets updated everytime through send_impl.
+        # However, if these are always top level, next_auto_step will have the 
+        # same value each time through send_impl.  We can then check against
+        # step, which is preserved across send_impl to track state
+        s = self.next_auto_step
+        self.next_auto_step += 1
+        #if self.step == -1:
+        #    self.step = s
+        return self.step == s
+    def skip_next_step(self):
+        self.step += 1
+        self.complete_step()
+    def complete_step(self):
+        self.step += 1
+    def for_loop(self, i: Iterable[T], start_step: Optional[int] = None, end_step: Optional[int] = None) -> Iterator[T]:
         # this gets called once for each send_impl.  It sets up its own 
         # iterator to keep track of state
         # The inner iterater starts with returning whatever the base_it
@@ -269,91 +308,142 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
         # same value.  Only increments base_it if it is looped more than once
         # in a single send_impl call
 
-        # _for_loop isn't created unless it is needed
+        # loop_state isn't created unless it is needed
         try:
-            fl = self._for_loop
+            loop_state = self.loop_state
         except AttributeError:
-            fl = self._for_loop = {}
+            loop_state = self.loop_state = LoopStateContainer({},[])
 
         # # auto_step logic
-        # start_step = self.next_auto_step
-        # self.next_auto_step += 1
+        if start_step is None:
+            start_step = self.next_auto_step
+            self.next_auto_step += 1
+        else:
+            self.next_auto_step = start_step + 1
+
         if self.step == start_step:
             base_it = iter(i)
 
             # We can't increment iterator here. We want to do that within the
             # inner iterator, so StopIteration is handled corrctly
-            start_value = NIL  # use marker as start_value may me None
-            fl[start_step] = (base_it, start_value)
-            
+            state = ForLoopState[T](base_it)
+            loop_state.by_step[start_step] = state
+            loop_state.stack.append(state)
+        else:
+            state = loop_state.by_step[start_step]
+            assert isinstance(state, ForLoopState)
+            state = cast(ForLoopState[T], state)  # satisfy generic type check
+
+            if state.end_step is not None:
+                # loop complete, skip inner part of loop
+                # ensure steps after ase autonumbered consistently
+                if end_step is not None:
+                    state.end_step = end_step
+                self.next_auto_step = state.end_step
+                return iter(())
         
-        # the _for_loop holds state across send_impl.  Uses start_step as a unique
-        # value
-        base_it, start_value =  fl[start_step]
         outer = self
         class inner_it(Iterator[S]):
             def __init__(self):
-                #self.end_step = None
                 self.first_run = True
 
-            def __next__(self):
-                assert start_step <= outer.step <= end_step
+            def __next__(self) -> T:
+                assert start_step <= outer.step
                 if self.first_run:
                     # First run always returns the last value from base_it
                     self.first_run = False
-                    if start_value is not NIL:
-                        return start_value
-                # else:
-                #     # auto detect last step
-                #     if self.end_step is None:
-                #         self.end_step = outer.next_auto_step
-                
+                    if  not isinstance(state.start_value, NIL) :
+                        return state.start_value
+    
+                # Advance iterator and check for exit
                 try:
-                    next_value = next(base_it)
+                    next_value = next(state.base_it)
                 except StopIteration:
-                    #assert start_value is not NIL, "Base iterator immediately returned StopIteration. Cannot detect end step"
-                    #assert self.end_step is not None
-                    #outer.step = self.end_step # set step state to end of loop
-                    outer.step = end_step + 1 # set step state to end of loop
+                    # iterator done, break loop
+                    outer.complete_step()
+                    loop_state.stack.pop(-1)
+                    # save end_step to ensure next passes preserve
+                    if end_step is not None:
+                        outer.step = end_step
+                    state.end_step = outer.next_auto_step = outer.step
                     raise
 
                 # save across send_impl. This will be returned in the next send_impl
-                outer._for_loop[start_step] = (base_it, next_value)                
-                outer.step = start_step + 1  # the loop starts at the beginning
+                state.start_value = next_value       
+                outer.step = outer.next_auto_step = start_step + 1  # the loop starts at the beginning
                 return next_value
 
             def __iter__(self):
                 return self
         return inner_it[T]()
 
-    def while_loop(self, condition: bool | Callable[[], bool], start_step: int, end_step: int):
-        
+    def while_loop(self, condition: bool | Callable[[], bool], start_step: Optional[int] = None, end_step: Optional[int] = None):
+        # loop state isn't created unless it is needed
         try:
-            wl = self._while_loop
+            loop_state = self.loop_state
         except AttributeError:
-            wl = self._while_loop = set()
+            loop_state = self.loop_state = LoopStateContainer({},[])
+
+        # # auto_step logic
+        if start_step is None:
+            start_step = self.next_auto_step
+            self.next_auto_step += 1
+        else:
+            self.next_auto_step = start_step + 1
 
         if self.step == start_step:
-            wl.add(start_step)
-
-        if start_step in wl:
-            if isinstance(condition, Callable):
-                condition = condition()
-            if condition:
-                self.step = start_step + 1
-            else:
-                self.step = end_step + 1
-            return condition
+            state = WhileLoopState()
+            loop_state.by_step[start_step] = state
+            loop_state.stack.append(state)
         else:
-            wl.add(start_step)
-            if self.step <= end_step:
-                assert self.step > start_step
-                return True
-            return False
+            state = loop_state.by_step[start_step]
+            assert isinstance(state, WhileLoopState)
 
+            if state.end_step is not None:
+                # Loop complete Skip inner part of loop
+                # ensure steps after ase autonumbered consistently
+                self.next_auto_step = state.end_step
+                return iter(())
+            
 
+        outer = self
+        class inner_it(Iterator[None]):
+            def __init__(self):
+                self.first_run = True
 
+            def __next__(self) -> None:
+                assert start_step <= outer.step
+                if self.first_run:
+                    # First run always returns the last value condition
+                    self.first_run = False
+                    if state.start_value:
+                        # Condition True, continue loop
+                        return None
+    
+                # check condition
+                if isinstance(condition, Callable):
+                    next_value = condition()
+                else:
+                    next_value = condition
 
+                if not next_value:
+                    # Condition false, break loop
+                    outer.complete_step()
+                    loop_state.stack.pop(-1)
+                    # save end_step to ensure next passes preserve
+                    if end_step is not None:
+                        outer.step = end_step
+                    state.end_step = outer.next_auto_step = outer.step
+                    raise StopIteration
+                    
+                # save across send_impl. This will be returned in the next send_impl
+                state.start_value = next_value       
+                outer.step = outer.next_auto_step = start_step + 1  # the loop starts at the beginning
+                return None
+
+            def __iter__(self):
+                return self
+        return inner_it()
 
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
 PlayGenerator_Return = Yield[PlayYield] | Return[None]
@@ -469,8 +559,7 @@ class MythicMischiefGame:
                     # yield from self.place_mythics(players[1], True)
                     return YieldFrom(gamestate.place_mythics(players[1], True))
                 # Main loop 
-                while self.while_loop(True, 4, 10 ):
-
+                for _ in self.while_loop(True, 4, 10 ):
                     for player in self.for_loop(players, 5, 9):
                         if self.step == 6:          
                             # done, reward = yield from self.mythic_phase(player)
@@ -521,7 +610,7 @@ class MythicMischiefGame:
                     assert action is not None
                     
                 # while len(player.mythics) < 3:
-                while self.while_loop(lambda: len(self.player.mythics)<3, 1, 4):
+                for _ in  self.while_loop(lambda: len(self.player.mythics)<3, 1, 4):
                     if self.step == 2:
                         available = []  # to make typechecker happy
                         if not self.anywhere:
@@ -586,7 +675,7 @@ class MythicMischiefGame:
                     assert action is not None
 
                 # while player.tomes:
-                while self.while_loop(lambda: bool(player.tomes), 1,4):
+                for _ in  self.while_loop(lambda: bool(player.tomes), 1,4):
                     if self.step == 2:
                         available = list[int]()
                         if player.move_tomes < 3:
@@ -654,7 +743,7 @@ class MythicMischiefGame:
                     # yield from self.place_mythics(player, False)
                     return YieldFrom(gamestate.place_mythics(player, False))                
                 # TODO: all skills/abilities
-                while self.while_loop(True, 2, 8):
+                for _ in  self.while_loop(True, 2, 8):
                     if self.step == 3:
                         if player.occupying:    
                             # Cannot stop movement on another players space.  Or activate other actins
