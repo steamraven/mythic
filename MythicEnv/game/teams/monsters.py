@@ -17,7 +17,7 @@ from MythicEnv.game import (
     VERT_WALL,
     board_to_action,
     action_to_board,
-
+    MythicMischiefGame,
 )
 from MythicEnv import *
 from collections import defaultdict
@@ -38,7 +38,9 @@ MonsterData = TeamData(
 class Monster(Team):
     data = MonsterData
 
-    def play_move_other(self, player: Player) -> PlayOrDoneCoroutine:
+    def play_move_other(
+        self, game: MythicMischiefGame, player: Player
+    ) -> PlayOrDoneCoroutine:
         # Monster: Throw
         # Move an ally or enemy from a
         # neighboring space to the exact
@@ -48,8 +50,6 @@ class Monster(Team):
 
         # TODO: don't need to select mythic, just opponent and dest
 
-        game = self.game
-        assert game
         other_player = game.players[player.id_ ^ 1]
         mask = KEEPER | PLAYER_MASK
         available_moves = dict[Coordinate, dict[Coordinate, Coordinate]]()
@@ -113,7 +113,9 @@ class Monster(Team):
 
         return False, 0
 
-    def play_move_shelf(self, player: Player, horz: bool) -> PlayOrDoneCoroutine:
+    def play_move_shelf(
+        self, game: MythicMischiefGame, player: Player, horz: bool
+    ) -> PlayOrDoneCoroutine:
         # Monstor: Barge
         # Rotate a Bookshelf into
         # the opposing adjacent space.
@@ -121,8 +123,6 @@ class Monster(Team):
         # Library completely.
         # • You cannot place a Bookshelf onto the outer
         # edge of the Library or another Bookshelf.
-        game = self.game
-        assert game
         wall_type = HORZ_WALL if horz else VERT_WALL
         o_wall_type = VERT_WALL if horz else HORZ_WALL
 

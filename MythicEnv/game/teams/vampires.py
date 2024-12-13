@@ -15,6 +15,7 @@ from MythicEnv.game import (
     VERT_WALL,
     board_to_action,
     action_to_board,
+    MythicMischiefGame,
 )
 from MythicEnv import *
 from collections import defaultdict
@@ -36,7 +37,7 @@ VampireData = TeamData(
 class Vampire(Team):
     data = VampireData
 
-    def play_move_other(self, player: Player) -> PlayOrDoneCoroutine:
+    def play_move_other(self, game: MythicMischiefGame, player: Player) -> PlayOrDoneCoroutine:
         # Vampire: Lure
         # Move an ally or enemy 1 space
         # orthogonally or diagonally
@@ -46,8 +47,6 @@ class Vampire(Team):
         # • You can Lure onto a Cluttered space.
 
         available_dict = dict[Coordinate, dict[Coordinate, Coordinate]]()
-        game = self.game
-        assert game
         other_player = game.players[player.id_ ^ 1]
 
         if player.move_other:
@@ -105,7 +104,7 @@ class Vampire(Team):
 
         return False, 0
 
-    def play_move_shelf(self, player: Player, horz: bool) -> PlayOrDoneCoroutine:
+    def play_move_shelf(self, game: MythicMischiefGame, player: Player, horz: bool) -> PlayOrDoneCoroutine:
         # Vampire: Conceal
         # Rotate a Bookshelf around your space.
         # • You cannot block off a section of the
@@ -113,8 +112,6 @@ class Vampire(Team):
         # • You cannot place a Bookshelf onto the outer
         # edge of the Library or another Bookshelf.
 
-        game = self.game
-        assert game
         wall_type = HORZ_WALL if horz else VERT_WALL
         o_wall_type = VERT_WALL if horz else HORZ_WALL
 

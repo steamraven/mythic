@@ -348,8 +348,8 @@ class MythicMischiefRenderable(Renderable):
 
     # hack to calc maxinum sizes
     MAX_PLAYERS = [
-        Player(0, Vampire(None)),
-        Player(1, Monster(None)),
+        Player(0, Vampire()),
+        Player(1, Monster()),
     ]
 
     def attr_box(
