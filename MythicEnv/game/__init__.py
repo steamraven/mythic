@@ -671,21 +671,23 @@ class MythicMischiefGame:
 
             def send_impl(self, value: Optional[int]):
                 gamestate = self.gamestate
+                player = self.player
+                anywhere = self.anywhere
                 action = value
+
                 any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
                 respawn_mask = PLAYER_MASK | KEEPER
 
                 if self.next_step():
                     # Init
                     assert Action is None
-                    self.available = []  # to make typechecker happy
                     self.complete_step()
 
                 # while len(player.mythics) < 3:
-                for _ in self.while_loop(lambda: len(self.player.mythics) < 3):
+                for _ in self.while_loop(lambda: len(player.mythics) < 3):
                     if self.next_step():
                         available = []  # to make typechecker happy
-                        if not self.anywhere:
+                        if not anywhere:
                             available = [
                                 respawn
                                 for respawn in gamestate.dest_card.respawn
@@ -693,8 +695,8 @@ class MythicMischiefGame:
                             ]
                             if len(available) == 0:
                                 # if we can't place now, we wont be able to anytime this call. Start searching anywhere
-                                self.anywhere = True
-                        if self.anywhere:
+                                anywhere = self.anywhere = True
+                        if anywhere:
                             available = [
                                 (x, y)
                                 for x in range(5)
@@ -705,9 +707,9 @@ class MythicMischiefGame:
                         # action = yield PlayYield(
                         return Yield(
                             PlayYield(
-                                self.player.id_,
+                                player.id_,
                                 ActionPhase.PLACE_MYTHIC,
-                                3 - len(self.player.mythics),
+                                3 - len(player.mythics),
                                 ActionType.SELECT_DEST,
                                 [board_to_action(x, y) for x, y in available],
                             )
@@ -715,8 +717,9 @@ class MythicMischiefGame:
                     if self.next_step():
                         assert action is not None
                         pos = action_to_board(action)
-                        gamestate.board[pos] |= PLAYER[self.player.id_]
-                        self.player.mythics.add(pos)
+                        gamestate.board[pos] |= PLAYER[player.id_]
+                        player.mythics.add(pos)
+
                 return Return(None)
 
         state = PlaceMythicsState()
