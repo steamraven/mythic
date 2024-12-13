@@ -8,7 +8,17 @@ import abc
 import copy
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Callable, Generator, Generic, Iterable, Iterator, Optional, TypeVar, cast
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Generic,
+    Iterable,
+    Iterator,
+    Optional,
+    TypeVar,
+    cast,
+)
 from MythicEnv import *
 from MythicEnv.data import *
 
@@ -188,28 +198,37 @@ T_Return = TypeVar("T_Return")
 T_Send = TypeVar("T_Send")
 T = TypeVar("T")
 S = TypeVar("S")
+
+
 class NIL:
     pass
+
+
 Nil = NIL()
+
+
 @dataclass
 class Yield(Generic[T_Yield]):
     value: T_Yield
+
 
 @dataclass
 class Return(Generic[T_Return]):
     value: T_Return
 
+
 class Break:
     pass
+
 
 @dataclass
 class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
     step: int = 0
 
     @abc.abstractmethod
-    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
-        ...
-    def as_generator(self)-> Generator[T_Yield, T_Send, T_Return]:
+    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] | Return[T_Return]: ...
+
+    def as_generator(self) -> Generator[T_Yield, T_Send, T_Return]:
         v = None
         while True:
             y_or_r = self.send(v)
@@ -218,22 +237,34 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
             else:
                 return y_or_r.value
 
+
 @dataclass
 class YieldFrom(Generic[T_Yield, T_Send, T_Return]):
-    gen: ClonableGenerator[T_Yield, T_Send, T_Return] | Generator[T_Yield, T_Send, T_Return] 
+    gen: (
+        ClonableGenerator[T_Yield, T_Send, T_Return]
+        | Generator[T_Yield, T_Send, T_Return]
+    )
+
 
 class LoopState:
     end_step: Optional[int] = None
+
+
 @dataclass
 class ForLoopState(LoopState, Generic[T]):
     base_it: Iterator[T]
     start_value: T | NIL = Nil
+
+
 @dataclass
 class WhileLoopState(LoopState):
     start_value: bool = False
+
+
 class LoopStateContainer(NamedTuple):
     by_step: dict[int, LoopState]
     stack: list[LoopState]
+
 
 class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
     _yield_from: YieldFrom[T_Yield, T_Send, Any] | None
@@ -244,15 +275,22 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
         self._yield_from = None
         self.next_auto_step = 0
 
-
     @abc.abstractmethod
-    def send_impl(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] | YieldFrom[T_Yield, T_Send, Any] | Generator[T_Yield, T_Send, Any]:
-        ...
-    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] |  Return[T_Return] :
+    def send_impl(
+        self, value: Optional[T_Send]
+    ) -> (
+        Yield[T_Yield]
+        | Return[T_Return]
+        | YieldFrom[T_Yield, T_Send, Any]
+        | Generator[T_Yield, T_Send, Any]
+        | Break
+    ): ...
+
+    def send(self, value: Optional[T_Send]) -> Yield[T_Yield] | Return[T_Return]:
         while True:
             if self._yield_from is None:
                 # Auto step starts afresh each send
-                self.next_auto_step = 0 
+                self.next_auto_step = 0
 
                 s = self.send_impl(value)
                 value = None
@@ -283,28 +321,36 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                 self.complete_step()
                 self._yield_from = None
                 value = None
-    
+
     def next_step(self, custom_step: Optional[int] = None) -> bool:
         "Check step condition"
         # next_auto_step gets updated everytime through send_impl.
-        # However, if these are always top level, next_auto_step will have the 
+        # However, if these are always top level, next_auto_step will have the
         # same value each time through send_impl.  We can then check against
         # step, which is preserved across send_impl to track state
         s = self.next_auto_step
         self.next_auto_step += 1
-        #if self.step == -1:
+        # if self.step == -1:
         #    self.step = s
         return self.step == s
+
     def skip_next_step(self):
         self.step += 1
         self.complete_step()
+
     def complete_step(self):
         self.step += 1
-    def for_loop(self, i: Iterable[T], start_step: Optional[int] = None, end_step: Optional[int] = None) -> Iterator[T]:
-        # this gets called once for each send_impl.  It sets up its own 
+
+    def for_loop(
+        self,
+        i: Iterable[T],
+        start_step: Optional[int] = None,
+        end_step: Optional[int] = None,
+    ) -> Iterator[T]:
+        # this gets called once for each send_impl.  It sets up its own
         # iterator to keep track of state
         # The inner iterater starts with returning whatever the base_it
-        # returned last.  This way, each call through send_impl gets the 
+        # returned last.  This way, each call through send_impl gets the
         # same value.  Only increments base_it if it is looped more than once
         # in a single send_impl call
 
@@ -312,7 +358,7 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
         try:
             loop_state = self.loop_state
         except AttributeError:
-            loop_state = self.loop_state = LoopStateContainer({},[])
+            loop_state = self.loop_state = LoopStateContainer({}, [])
 
         # # auto_step logic
         if start_step is None:
@@ -341,8 +387,9 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                     state.end_step = end_step
                 self.next_auto_step = state.end_step
                 return iter(())
-        
+
         outer = self
+
         class inner_it(Iterator[S]):
             def __init__(self):
                 self.first_run = True
@@ -352,9 +399,9 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                 if self.first_run:
                     # First run always returns the last value from base_it
                     self.first_run = False
-                    if  not isinstance(state.start_value, NIL) :
+                    if not isinstance(state.start_value, NIL):
                         return state.start_value
-    
+
                 # Advance iterator and check for exit
                 try:
                     next_value = next(state.base_it)
@@ -369,20 +416,27 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                     raise
 
                 # save across send_impl. This will be returned in the next send_impl
-                state.start_value = next_value       
-                outer.step = outer.next_auto_step = start_step + 1  # the loop starts at the beginning
+                state.start_value = next_value
+                # the loop starts at the beginning
+                outer.step = outer.next_auto_step = start_step + 1
                 return next_value
 
             def __iter__(self):
                 return self
+
         return inner_it[T]()
 
-    def while_loop(self, condition: bool | Callable[[], bool], start_step: Optional[int] = None, end_step: Optional[int] = None):
+    def while_loop(
+        self,
+        condition: bool | Callable[[], bool],
+        start_step: Optional[int] = None,
+        end_step: Optional[int] = None,
+    ):
         # loop state isn't created unless it is needed
         try:
             loop_state = self.loop_state
         except AttributeError:
-            loop_state = self.loop_state = LoopStateContainer({},[])
+            loop_state = self.loop_state = LoopStateContainer({}, [])
 
         # # auto_step logic
         if start_step is None:
@@ -404,9 +458,9 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                 # ensure steps after ase autonumbered consistently
                 self.next_auto_step = state.end_step
                 return iter(())
-            
 
         outer = self
+
         class inner_it(Iterator[None]):
             def __init__(self):
                 self.first_run = True
@@ -419,7 +473,7 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                     if state.start_value:
                         # Condition True, continue loop
                         return None
-    
+
                 # check condition
                 if isinstance(condition, Callable):
                     next_value = condition()
@@ -435,15 +489,19 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                         outer.step = end_step
                     state.end_step = outer.next_auto_step = outer.step
                     raise StopIteration
-                    
+
                 # save across send_impl. This will be returned in the next send_impl
-                state.start_value = next_value       
-                outer.step = outer.next_auto_step = start_step + 1  # the loop starts at the beginning
+                state.start_value = next_value
+                outer.step = outer.next_auto_step = (
+                    start_step + 1
+                )  # the loop starts at the beginning
                 return None
 
             def __iter__(self):
                 return self
+
         return inner_it()
+
 
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
 PlayGenerator_Return = Yield[PlayYield] | Return[None]
@@ -451,11 +509,25 @@ PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
 PlayOrDoneGenerator_Return = Yield[PlayYield] | Return[tuple[bool, int]]
 PlaySkill_ = Callable[[Player], PlayOrDoneGenerator]
 PlayGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, None]
-PlayGeneratorImpl_Return = Yield[PlayYield] | Return[None] | YieldFrom[PlayYield, int, Any] | Generator[PlayYield, int, Any]
+PlayGeneratorImpl_Return = (
+    Yield[PlayYield]
+    | Return[None]
+    | YieldFrom[PlayYield, int, Any]
+    | Generator[PlayYield, int, Any]
+    | Break
+)
 PlayOrDoneGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, tuple[bool, int]]
-PlayOrDoneGeneratorImpl_Return =  Yield[PlayYield] |  Return[tuple[bool,int]] | YieldFrom[PlayYield, int, Any] | Generator[PlayYield, int, Any]
+PlayOrDoneGeneratorImpl_Return = (
+    Yield[PlayYield]
+    | Return[tuple[bool, int]]
+    | YieldFrom[PlayYield, int, Any]
+    | Generator[PlayYield, int, Any]
+    | Break
+)
 
-PlaySkill = Callable[[Player], PlayOrDoneCoroutine| PlayOrDoneGenerator] 
+PlaySkill = Callable[[Player], PlayOrDoneCoroutine | PlayOrDoneGenerator]
+
+
 class Team(abc.ABC):
     """Team specific info"""
 
@@ -529,8 +601,10 @@ class MythicMischiefGame:
 
     def start_play(self) -> PlayOrDoneGenerator:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
+
         class PlayState(PlayOrDoneGeneratorImpl):
             gamestate: MythicMischiefGame
+
             def send_impl(self, value: Optional[int]):
                 gamestate = self.gamestate
                 action = value
@@ -558,43 +632,44 @@ class MythicMischiefGame:
 
                     # yield from self.place_mythics(players[1], True)
                     return YieldFrom(gamestate.place_mythics(players[1], True))
-                # Main loop 
+                # Main loop
                 for _ in self.while_loop(True):
                     for player in self.for_loop(players):
-                        if self.next_step():          
+                        if self.next_step():
                             # done, reward = yield from self.mythic_phase(player)
                             return YieldFrom(gamestate.mythic_phase(player))
-        
+
                         if self.next_step():
                             done, reward = self.yield_from_result
                             if done:
-                                #return done, reward
-                                return Return((done,reward))
+                                # return done, reward
+                                return Return((done, reward))
                             assert not player.occupying
                             # done, reward = yield from self.keeper_phase(player)
                             return YieldFrom(gamestate.keeper_phase(player))
-                        if  self.next_step():
+                        if self.next_step():
                             done, reward = self.yield_from_result
                             if done:
-                                #return done, reward
+                                # return done, reward
                                 return Return((done, reward))
 
                             # yield from self.cleanup_phase(player)
                             return YieldFrom(gamestate.cleanup_phase(player))
                 assert False
-                
+
         state = PlayState()
         # Deepcopy will only copy once
         state.gamestate = self
         return state
 
-
     def place_mythics(self, player: Player, anywhere: bool) -> PlayGenerator:
         """Place available mythics in spot in an available spot"""
+
         class PlaceMythicsState(PlayGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
             anywhere: bool
+
             def send_impl(self, value: Optional[int]):
                 gamestate = self.gamestate
                 action = value
@@ -608,9 +683,9 @@ class MythicMischiefGame:
                     self.step += 1
                 else:
                     assert action is not None
-                    
+
                 # while len(player.mythics) < 3:
-                for _ in  self.while_loop(lambda: len(self.player.mythics)<3, 1, 4):
+                for _ in self.while_loop(lambda: len(self.player.mythics) < 3, 1, 4):
                     if self.step == 2:
                         available = []  # to make typechecker happy
                         if not self.anywhere:
@@ -659,6 +734,7 @@ class MythicMischiefGame:
         class SpendTomesState(PlayGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
+
             def send_impl(self, value: Optional[int]):
                 action = value
                 gamestate = self.gamestate
@@ -669,13 +745,14 @@ class MythicMischiefGame:
                 if self.step == 0:
                     # init
                     assert action is None
-                    gamestate.reset_skills(player)  # This resets starting boost. See start_play
+                    # This resets starting boost. See start_play
+                    gamestate.reset_skills(player)
                     self.step+= 1
                 else:
                     assert action is not None
 
                 # while player.tomes:
-                for _ in  self.while_loop(lambda: bool(player.tomes), 1,4):
+                for _ in self.while_loop(lambda: bool(player.tomes), 1, 4):
                     if self.step == 2:
                         available = list[int]()
                         if player.move_tomes < 3:
@@ -699,7 +776,7 @@ class MythicMischiefGame:
                                 available,
                             )
                         )
-                    
+
                     if self.step == 3:
                         assert action is not None
                         player.tomes -= 1
@@ -707,7 +784,10 @@ class MythicMischiefGame:
                             player.move_tomes += 1
                         elif action == Action.MOVE_OTHER:
                             player.move_other_tomes += 1
-                        elif action == Action.MOVE_HORZ_SHELF or action == Action.MOVE_VERT_SHELF:
+                        elif (
+                            action == Action.MOVE_HORZ_SHELF
+                            or action == Action.MOVE_VERT_SHELF
+                        ):
                             player.move_shelf_tomes += 1
                         elif action == Action.DISTRACT:
                             player.distract_tomes += 1
@@ -724,9 +804,11 @@ class MythicMischiefGame:
 
     def mythic_phase(self, player: Player) -> PlayOrDoneGenerator:
         """Phase where actions are performed by the mythics"""
-        class MythicPhaseState( PlayOrDoneGeneratorImpl):
+
+        class MythicPhaseState(PlayOrDoneGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
+
             def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
                 action = value
                 gamestate = self.gamestate
@@ -741,11 +823,11 @@ class MythicMischiefGame:
 
                 if self.step == 1:
                     # yield from self.place_mythics(player, False)
-                    return YieldFrom(gamestate.place_mythics(player, False))                
+                    return YieldFrom(gamestate.place_mythics(player, False))
                 # TODO: all skills/abilities
                 for _ in  self.while_loop(True, 2, 8):
                     if self.step == 3:
-                        if player.occupying:    
+                        if player.occupying:
                             # Cannot stop movement on another players space.  Or activate other actins
                             # yield from self.play_move(player)
                             return YieldFrom(gamestate.play_move(player))
@@ -757,11 +839,13 @@ class MythicMischiefGame:
                             return Return((done,reward))
                         # Try more actions
                         continue
-            
+
                     if self.step == 5:
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
-                        self.skill_coroutines = dict[int, PlayOrDoneCoroutine| PlayOrDoneGenerator]()
+                        self.skill_coroutines = dict[
+                            int, PlayOrDoneCoroutine | PlayOrDoneGenerator
+                        ]()
                         for skill in gamestate.player_skills[player.id_]:
                             coroutine = skill(player)
                             if isinstance(coroutine, ClonableGenerator):
@@ -778,17 +862,22 @@ class MythicMischiefGame:
 
                         self.step += 1
                         # action = yield PlayYield(
-                        return Yield(PlayYield(
-                           player.id_, ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, available
-                        ))
-                    if self.step == 6:
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.USE_SKILL,
+                                1,
+                                ActionType.SELECT_SKILL,
+                                available,
+                            )
+                        )
                         assert action is not None
                         if action == Action.PASS:
-                            #return False, 0
+                            # return False, 0
                             return Return((False, 0))
-                        #done, reward = yield from skill_coroutines[action]
+                        # done, reward = yield from skill_coroutines[action]
                         return YieldFrom(self.skill_coroutines[action])
- 
+
                     if self.step == 7:
                         done, reward = self.yield_from_result
                         if done:
@@ -808,6 +897,7 @@ class MythicMischiefGame:
         class PlayMoveState(PlayOrDoneGeneratorImpl):
             gamestate: MythicMischiefGame
             player: Player
+
             def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
                 action = value
                 gamestate = self.gamestate
@@ -823,6 +913,7 @@ class MythicMischiefGame:
                     assert action is not None
 
                 if self.step == 1:
+
                     def find_available_moves(
                         pos: Coordinate, remaining: int
                     ) -> list[tuple[Coordinate, int]]:
@@ -836,7 +927,7 @@ class MythicMischiefGame:
 
                         #     # If the destination has another player, make sure there is an exit
                         #     if self.board[x, y] & other_player_mask:
-                        #         if remaining > cost: 
+                        #         if remaining > cost:
                         #             next_moves = find_available_moves((x, y), remaining - cost)
                         #             if next_moves:
                         #                 cost += min(a[1] for a in next_moves)
@@ -852,21 +943,24 @@ class MythicMischiefGame:
                                 continue
                             cost = 2 if gamestate.board[pos] & CLUTTER else 1
                             if gamestate.board[n] & other_player_mask:
-                                if remaining > cost: 
-                                    next_moves = find_available_moves(n, remaining - cost)
+                                if remaining > cost:
+                                    next_moves = find_available_moves(
+                                        n, remaining - cost
+                                    )
                                     if next_moves:
                                         cost += min(a[1] for a in next_moves)
                                         available.append((n, cost))
                                 continue
-                            
+
                             if remaining >= cost:
                                 available.append((n, cost))
 
-
-                        #self.check_neighbors(pos, inner, 0)
+                        # self.check_neighbors(pos, inner, 0)
                         return available
 
-                    self.available_moves = dict[Coordinate, list[tuple[Coordinate, int]]]()
+                    self.available_moves = dict[
+                        Coordinate, list[tuple[Coordinate, int]]
+                    ]()
 
                     # If player has a mythic occupying another mythics stop, only that mythic can move
                     if player.occupying:
@@ -879,7 +973,9 @@ class MythicMischiefGame:
                     if player.move:
                         for mythic in mythics:
                             gamestate.board[mythic] ^= player_mask
-                            self.available_moves[mythic] = find_available_moves(mythic, player.move)
+                            self.available_moves[mythic] = find_available_moves(
+                                mythic, player.move
+                            )
                             gamestate.board[mythic] |= player_mask
 
                     # overlap = player.mythics & other_player.mythics
@@ -921,33 +1017,49 @@ class MythicMischiefGame:
                     #         self.board[mythic] |= player_mask
 
                     # This yield should return Action.Move,
-                    # but because of how this co-routine is called, 
+                    # but because of how this co-routine is called,
                     # the first yield may return either None, or Action.MOVE,
                     # Either way, we don't care
                     if any(v for v in self.available_moves.values()):
-                        #yield PlayYield(
-                        return Yield(PlayYield(
-                            player.id_,
-                            ActionPhase.USE_SKILL,
-                            1,
-                            ActionType.SELECT_SKILL,
-                            [Action.MOVE],
-                        ))
+                        # yield PlayYield(
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.USE_SKILL,
+                                1,
+                                ActionType.SELECT_SKILL,
+                                [Action.MOVE],
+                            )
+                        )
                     else:
-                        #yield PlayYield(
-                        return Yield(PlayYield(
-                            player.id_, ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, []
-                        ))
+                        # yield PlayYield(
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.USE_SKILL,
+                                1,
+                                ActionType.SELECT_SKILL,
+                                [],
+                            )
+                        )
+                
                 if self.step == 2:
                     # Select mythic to move from mythics that can move
-                    #action = yield PlayYield(
-                    return Yield(PlayYield(
-                        player.id_,
-                        ActionPhase.MOVE,
-                        2,
-                        ActionType.SELECT_SELF,
-                        [board_to_action(*k) for k, v in self.available_moves.items() if v],
-                    ))
+                    # action = yield PlayYield(
+                    return Yield(
+                        PlayYield(
+                            player.id_,
+                            ActionPhase.MOVE,
+                            2,
+                            ActionType.SELECT_SELF,
+                            [
+                                board_to_action(*k)
+                                for k, v in self.available_moves.items()
+                                if v
+                            ],
+                        )
+                    )
+
                 if self.step == 3:
                     assert action is not None
                     self.mythic = action_to_board(action)
@@ -956,14 +1068,17 @@ class MythicMischiefGame:
                     assert available
 
                     # Choose destination from available move destinations
-                    #action = yield PlayYield(
-                    return Yield(PlayYield(
-                        player.id_,
-                        ActionPhase.MOVE,
-                        1,
-                        ActionType.SELECT_DEST,
-                        [board_to_action(*a[0]) for a in available],
-                    ))
+                    # action = yield PlayYield(
+                    return Yield(
+                        PlayYield(
+                            player.id_,
+                            ActionPhase.MOVE,
+                            1,
+                            ActionType.SELECT_DEST,
+                            [board_to_action(*a[0]) for a in available],
+                        )
+                    )
+
                 if self.step == 4:
                     # Move mythic
                     assert action is not None
@@ -978,12 +1093,14 @@ class MythicMischiefGame:
                     player.move -= cost
 
                     # Check for mythic occupying space of another
-                    player.occupying = dest if gamestate.board[dest] & other_player_mask else None
+                    player.occupying = (
+                        dest if gamestate.board[dest] & other_player_mask else None
+                    )
                     if player.occupying:
                         if not (player.move):
                             assert player.move
 
-                return Return(( False, 0 ))
+                return Return((False, 0))
 
         state = PlayMoveState()
         state.gamestate = self
@@ -1014,7 +1131,7 @@ class MythicMischiefGame:
                 available_moves[mythic] = available
 
         # This yield shoud retorn Action.DISTRACT,
-        # but because of how this co-routine is called, 
+        # but because of how this co-routine is called,
         # the first yield will return None,
         if any(v for v in available_moves.values()):
             yield PlayYield(
@@ -1102,14 +1219,12 @@ class MythicMischiefGame:
                 return (yield from self.end_game(self.players[1], 1))
             return (yield from self.end_game(player, 0))
 
-            
-
         return False, 0
 
     def end_game(self, player: Player, reward: int) -> PlayOrDoneCoroutine:
-        #yield PlayYield(
+        # yield PlayYield(
         #    player.id_, ActionPhase.END_GAME, 1, ActionType.PASS, [Action.PASS]
-        #)
+        # )
         return True, reward
         yield
 
@@ -1170,8 +1285,8 @@ class MythicMischiefGame:
         """Actually move the mythic and do record keeping"""
         player_mask = PLAYER[player.id_]
 
-        if not (0<=new[0]<=4 and 0<=new[1]<=4):
-            assert (0<=new[0]<=4 and 0<=new[1]<=4)
+        if not (0 <= new[0] <= 4 and 0 <= new[1] <= 4):
+            assert 0 <= new[0] <= 4 and 0 <= new[1] <= 4
         if not (self.board[old] & player_mask and old in player.mythics):
             assert self.board[old] & player_mask and old in player.mythics
 
@@ -1189,8 +1304,8 @@ class MythicMischiefGame:
         """Actually move the keeper, adjust scores and check for endgame"""
         # Move Keeper
 
-        if not (0<=dest[0]<=4 and 0<=dest[1]<=4):
-            assert (0<=dest[0]<=4 and 0<=dest[1]<=4)
+        if not (0 <= dest[0] <= 4 and 0 <= dest[1] <= 4):
+            assert 0 <= dest[0] <= 4 and 0 <= dest[1] <= 4
 
         if not (self.board[self.keeper] & KEEPER):
             assert self.board[self.keeper] & KEEPER
@@ -1222,11 +1337,11 @@ class MythicMischiefGame:
 
     def move_wall(self, src: Wall, dest: Wall):
         if dest.wall_type == HORZ_WALL:
-            if not (0<=dest.pos[0]<=4 and 0<=dest.pos[1]<=3):
-                assert (0<=dest.pos[0]<=4 and 0<=dest.pos[1]<=3)
+            if not (0 <= dest.pos[0] <= 4 and 0 <= dest.pos[1] <= 3):
+                assert 0 <= dest.pos[0] <= 4 and 0 <= dest.pos[1] <= 3
         else:
-            if not (0<=dest.pos[0]<=3 and 0<=dest.pos[1]<=4):
-                assert (0<=dest.pos[0]<=3 and 0<=dest.pos[1]<=4)
+            if not (0 <= dest.pos[0] <= 3 and 0 <= dest.pos[1] <= 4):
+                assert 0 <= dest.pos[0] <= 3 and 0 <= dest.pos[1] <= 4
 
         self.board[src.pos] ^= src.wall_type
         self.board[dest.pos] |= dest.wall_type
@@ -1249,11 +1364,11 @@ class MythicMischiefGame:
     def get_neighbors(self, pos: Coordinate) -> Generator[Coordinate]:
         x, y = pos
         if y < 4 and not (self.board[x, y] & HORZ_WALL):
-            yield x, y+1
+            yield x, y + 1
         if x < 4 and not (self.board[x, y] & VERT_WALL):
             yield x + 1, y
         if y > 0 and not (self.board[x, y - 1] & HORZ_WALL):
-           yield x, y - 1
+            yield x, y - 1
         if x > 0 and not (self.board[x - 1, y] & VERT_WALL):
             yield x - 1, y
 
@@ -1268,7 +1383,7 @@ class MythicMischiefGame:
         queue = [(dest, cost)]
         dest_costs[dest] = cost
 
-        #def inner(x: int, y: int, base_cost: int):
+        # def inner(x: int, y: int, base_cost: int):
         #    "add to dest_costs and queue if better cost"
         #    if self.board[x, y] & CLUTTER:
         #        cost = base_cost + 2
@@ -1279,12 +1394,12 @@ class MythicMischiefGame:
         #        queue.append(((x, y), cost))
         #    return base_cost
 
-        #inner(*dest, 0)
+        # inner(*dest, 0)
 
         while queue:
             node, cost = queue.pop(0)
             for n in self.get_neighbors(node):
-                
+
                 if self.board[n] & CLUTTER:
                     n_cost = cost + 2
                 else:
@@ -1292,7 +1407,7 @@ class MythicMischiefGame:
                 if n_cost < dest_costs[n]:
                     dest_costs[n] = n_cost
                     queue.append((n, n_cost))
-            #self.check_neighbors(node, inner, cost)
+            # self.check_neighbors(node, inner, cost)
         return dest_costs
 
     def line_of_sight(
@@ -1360,8 +1475,8 @@ class MythicMischiefGame:
     def cross_wall_bitset(self, pos: Coordinate) -> int:
         """Create a bitset of walls at the bottom right intersection of position"""
         acc = 0
-        if not (0<=pos[0]<=3 and 0<=pos[1]<=3):
-            assert 0<=pos[0]<=3 and 0<=pos[1]<=3
+        if not (0 <= pos[0] <= 3 and 0 <= pos[1] <= 3):
+            assert 0 <= pos[0] <= 3 and 0 <= pos[1] <= 3
         x, y = pos
         value: int = self.board[pos]
         acc |= 0x1 if value & VERT_WALL else 0  # Up
@@ -1442,7 +1557,7 @@ class MythicMischiefGame:
             pos = queue.pop(0)
             if not seen[pos]:
                 seen[pos] = True
-                #self.check_neighbors(pos, inner, 0)
+                # self.check_neighbors(pos, inner, 0)
                 queue.extend(self.get_neighbors(pos))
 
         x = seen.all()
