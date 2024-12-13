@@ -507,7 +507,6 @@ PlayGenerator = ClonableGenerator[PlayYield, int, None]
 PlayGenerator_Return = Yield[PlayYield] | Return[None]
 PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
 PlayOrDoneGenerator_Return = Yield[PlayYield] | Return[tuple[bool, int]]
-PlaySkill_ = Callable[[Player], PlayOrDoneGenerator]
 PlayGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, None]
 PlayGeneratorImpl_Return = (
     Yield[PlayYield]
