@@ -810,33 +810,31 @@ class MythicMischiefGame:
                 gamestate = self.gamestate
                 player = self.player
 
-                if self.step == 0:
+                if self.next_step():
                     # init
                     assert action is None
-                    self.step += 1
-                else:
-                    assert action is not None
+                    self.complete_step()
 
-                if self.step == 1:
+                if self.next_step():
                     # yield from self.place_mythics(player, False)
                     return YieldFrom(gamestate.place_mythics(player, False))
                 # TODO: all skills/abilities
-                for _ in  self.while_loop(True, 2, 8):
-                    if self.step == 3:
+                for _ in self.while_loop(True):
+                    if self.next_step():
                         if player.occupying:
                             # Cannot stop movement on another players space.  Or activate other actins
                             # yield from self.play_move(player)
                             return YieldFrom(gamestate.play_move(player))
                         else:
-                            self.step = 5
-                    if self.step == 4:
+                            self.skip_next_step()
+                    if self.next_step():
                         done, reward = self.yield_from_result
                         if done:
-                            return Return((done,reward))
+                            return Return((done, reward))
                         # Try more actions
                         continue
 
-                    if self.step == 5:
+                    if self.next_step():
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
                         self.skill_coroutines = dict[
@@ -856,7 +854,6 @@ class MythicMischiefGame:
                                 self.skill_coroutines[a] = coroutine
                             available.extend(y.available_actions)
 
-                        self.step += 1
                         # action = yield PlayYield(
                         return Yield(
                             PlayYield(
@@ -867,6 +864,7 @@ class MythicMischiefGame:
                                 available,
                             )
                         )
+                    if self.next_step():
                         assert action is not None
                         if action == Action.PASS:
                             # return False, 0
@@ -874,7 +872,7 @@ class MythicMischiefGame:
                         # done, reward = yield from skill_coroutines[action]
                         return YieldFrom(self.skill_coroutines[action])
 
-                    if self.step == 7:
+                    if self.next_step():
                         done, reward = self.yield_from_result
                         if done:
                             # return done, reward
