@@ -900,13 +900,11 @@ class MythicMischiefGame:
                 player_mask = PLAYER[player.id_]
                 other_player_mask = PLAYER[player.id_ ^ 1]
                 not_available_mask = KEEPER | player_mask
-                if self.step == 0:
+                if self.next_step():
                     assert action is None
-                    self.step += 1
-                else:
-                    assert action is not None
+                    self.complete_step()
 
-                if self.step == 1:
+                if self.next_step():
 
                     def find_available_moves(
                         pos: Coordinate, remaining: int
@@ -1036,8 +1034,8 @@ class MythicMischiefGame:
                                 [],
                             )
                         )
-                
-                if self.step == 2:
+
+                if self.next_step():
                     # Select mythic to move from mythics that can move
                     # action = yield PlayYield(
                     return Yield(
@@ -1054,7 +1052,7 @@ class MythicMischiefGame:
                         )
                     )
 
-                if self.step == 3:
+                if self.next_step():
                     assert action is not None
                     self.mythic = action_to_board(action)
                     available = self.available_moves[self.mythic]
@@ -1073,7 +1071,7 @@ class MythicMischiefGame:
                         )
                     )
 
-                if self.step == 4:
+                if self.next_step():
                     # Move mythic
                     assert action is not None
                     dest = action_to_board(action)
