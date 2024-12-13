@@ -740,18 +740,16 @@ class MythicMischiefGame:
 
                 # Online game forces spend
 
-                if self.step == 0:
+                if self.next_step():
                     # init
                     assert action is None
                     # This resets starting boost. See start_play
                     gamestate.reset_skills(player)
-                    self.step+= 1
-                else:
-                    assert action is not None
+                    self.complete_step()
 
                 # while player.tomes:
-                for _ in self.while_loop(lambda: bool(player.tomes), 1, 4):
-                    if self.step == 2:
+                for _ in self.while_loop(lambda: bool(player.tomes)):
+                    if self.next_step():
                         available = list[int]()
                         if player.move_tomes < 3:
                             available.append(Action.MOVE)
@@ -775,7 +773,7 @@ class MythicMischiefGame:
                             )
                         )
 
-                    if self.step == 3:
+                    if self.next_step():
                         assert action is not None
                         player.tomes -= 1
                         if action == Action.MOVE:
