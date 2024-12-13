@@ -676,17 +676,15 @@ class MythicMischiefGame:
                 any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
                 respawn_mask = PLAYER_MASK | KEEPER
 
-                if self.step == 0:
+                if self.next_step():
                     # Init
                     assert Action is None
                     self.available = []  # to make typechecker happy
-                    self.step += 1
-                else:
-                    assert action is not None
+                    self.complete_step()
 
                 # while len(player.mythics) < 3:
-                for _ in self.while_loop(lambda: len(self.player.mythics) < 3, 1, 4):
-                    if self.step == 2:
+                for _ in self.while_loop(lambda: len(self.player.mythics) < 3):
+                    if self.next_step():
                         available = []  # to make typechecker happy
                         if not self.anywhere:
                             available = [
@@ -715,7 +713,7 @@ class MythicMischiefGame:
                                 [board_to_action(x, y) for x, y in available],
                             )
                         )
-                    if self.step == 3:
+                    if self.next_step():
                         assert action is not None
                         pos = action_to_board(action)
                         gamestate.board[pos] |= PLAYER[self.player.id_]
