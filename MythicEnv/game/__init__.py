@@ -536,7 +536,7 @@ PlayOrDoneGeneratorImpl_Return = (
 )
 
 PlaySkill = Callable[
-    ["MythicMischiefGame", Player], PlayOrDoneCoroutine | PlayOrDoneGenerator
+    ["MythicMischiefGame", Player], PlayOrDoneGenerator
 ]
 
 
@@ -548,22 +548,22 @@ class Team(abc.ABC):
     @abc.abstractmethod
     def play_move_other(
         self, game: "MythicMischiefGame", player: Player
-    ) -> PlayOrDoneCoroutine: ...
+    ) -> PlayOrDoneGenerator: ...
 
     def play_move_horz_shelf(
         self, game: "MythicMischiefGame", player: Player
-    ) -> PlayOrDoneCoroutine:
+    ) -> PlayOrDoneGenerator:
         return self.play_move_shelf(game, player, True)
 
     def play_move_vert_shelf(
         self, game: "MythicMischiefGame", player: Player
-    ) -> PlayOrDoneCoroutine:
+    ) -> PlayOrDoneGenerator:
         return self.play_move_shelf(game, player, False)
 
     @abc.abstractmethod
     def play_move_shelf(
         self, game: "MythicMischiefGame", player: Player, horz: bool
-    ) -> PlayOrDoneCoroutine: ...
+    ) -> PlayOrDoneGenerator: ...
 
 
 class MythicMischiefGame:
@@ -834,16 +834,13 @@ class MythicMischiefGame:
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
                         self.skill_coroutines = dict[
-                            int, PlayOrDoneCoroutine | PlayOrDoneGenerator
+                            int, PlayOrDoneGenerator
                         ]()
                         for skill in gamestate.player_skills[player.id_]:
                             coroutine = skill(gamestate, player)
-                            if isinstance(coroutine, ClonableGenerator):
-                                y_or_d = coroutine.send(None)
-                                assert isinstance(y_or_d, Yield)
-                                y = y_or_d.value
-                            else:
-                                y = next(coroutine)
+                            y_or_d = coroutine.send(None)
+                            assert isinstance(y_or_d, Yield)
+                            y = y_or_d.value
                             assert y.to_play == player.id_
                             for a in y.available_actions:
                                 assert a not in self.skill_coroutines
