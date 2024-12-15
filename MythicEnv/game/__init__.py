@@ -229,6 +229,8 @@ class ClonableGenerator(abc.ABC, Generic[T_Yield, T_Send, T_Return]):
     def send(self, value: Optional[T_Send]) -> Yield[T_Yield] | Return[T_Return]: ...
 
     def as_generator(self) -> Generator[T_Yield, T_Send, T_Return]:
+        # Note: the return value is NOT clonable.
+        # Used for compatibity when converting
         v = None
         while True:
             y_or_r = self.send(v)
