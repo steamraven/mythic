@@ -1176,65 +1176,94 @@ class MythicMischiefGame:
 
         return PlayDistractState()
 
-    def keeper_phase(self, player: Player) -> PlayOrDoneCoroutine:
+    def keeper_phase(self, player: Player) -> PlayOrDoneGenerator:
         """Move Keeper"""
-        keeper_moves = self.dest_card.keeper_moves
+        gamestate = self
 
-        if self.dests:
-            dest = self.dests[0]
-        else:
-            dest = (2, 2)
-        dest_costs = self.calc_dest_costs(dest)
+        class KeeperPhaseState(PlayOrDoneGeneratorImpl):
+            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+                action = value
+                if self.next_step():
+                    self.keeper_moves = gamestate.dest_card.keeper_moves
 
-        while keeper_moves:
+                    if gamestate.dests:
+                        dest = gamestate.dests[0]
+                    else:
+                        dest = (2, 2)
+                    self.dest_costs = gamestate.calc_dest_costs(dest)
+                    self.complete_step()
 
-            available = list[int]()
-            best_cost = 255
+                #  while keeper_moves:
+                for _ in self.while_loop(lambda: bool(self.keeper_moves)):
+                    if self.next_step():
+                        available = list[int]()
+                        best_cost = 255
 
-            for n in self.get_neighbors(self.keeper):
-                if keeper_moves >= 2 or not (self.board[n] & CLUTTER):
-                    # Can't move onto clutter if not enough moves
-                    n_cost = dest_costs[n]
-                    if n_cost < best_cost:
-                        available.clear()
-                        best_cost = n_cost
-                    if n_cost == best_cost:
-                        available.append(board_to_action(*n))
+                        for n in gamestate.get_neighbors(gamestate.keeper):
+                            if self.keeper_moves >= 2 or not (
+                                gamestate.board[n] & CLUTTER
+                            ):
+                                # Can't move onto clutter if not enough moves
+                                n_cost = self.dest_costs[n]
+                                if n_cost < best_cost:
+                                    available.clear()
+                                    best_cost = n_cost
+                                if n_cost == best_cost:
+                                    available.append(board_to_action(*n))
 
-            assert available
-            if True or self.all_keeper_moves or len(available) > 1:
-                action = yield PlayYield(
-                    player.id_,
-                    ActionPhase.MOVE_KEEPER,
-                    keeper_moves,
-                    ActionType.SELECT_DEST,
-                    available,
-                )
-            else:
-                # If only one choice, no need to ask player
-                action = available[0]
+                        assert available
+                        if len(available) > 1:
+                            # action = yield PlayYield(
+                            return Yield(
+                                PlayYield(
+                                    player.id_,
+                                    ActionPhase.MOVE_KEEPER,
+                                    self.keeper_moves,
+                                    ActionType.SELECT_DEST,
+                                    available,
+                                )
+                            )
+                        else:
+                            # If only one choice, no need to ask player
+                            action = available[0]
+                            self.complete_step()
+                    if self.next_step():
+                        assert action is not None
+                        x, y = action_to_board(action)
+                        done = gamestate.move_keeper((x, y))
+                        if done:
+                            # return (yield from self.end_game(player, 1))
+                            return ReturnYieldFrom(gamestate.end_game(player, 1))
 
-            x, y = action_to_board(action)
-            done = self.move_keeper((x, y))
-            if done:
-                return (yield from self.end_game(player, 1))
+                        if gamestate.board[x, y] & CLUTTER:
+                            self.keeper_moves -= 2
+                        else:
+                            self.keeper_moves -= 1
 
-            if self.board[x, y] & CLUTTER:
-                keeper_moves -= 2
-            else:
-                keeper_moves -= 1
+                if self.next_step():
+                    # switch lunch or end game
+                    # TODO: Switch lunches
+                    # TODO: Proper end
+                    if not gamestate.dests:
+                        if gamestate.players[0].score > gamestate.players[1].score:
+                            #  return (yield from self.end_game(self.players[0], 1))
+                            return ReturnYieldFrom(
+                                gamestate.end_game(gamestate.players[0], 1)
+                            )
 
-        # switch lunch or end game
-        # TODO: Switch lunches
-        # TODO: Proper end
-        if not self.dests:
-            if self.players[0].score > self.players[1].score:
-                return (yield from self.end_game(self.players[0], 1))
-            if self.players[1].score > self.players[0].score:
-                return (yield from self.end_game(self.players[1], 1))
-            return (yield from self.end_game(player, 0))
+                        if gamestate.players[1].score > gamestate.players[0].score:
+                            # return (yield from self.end_game(self.players[1], 1))
+                            return ReturnYieldFrom(
+                                gamestate.end_game(gamestate.players[1], 1)
+                            )
 
-        return False, 0
+                        # return (yield from self.end_game(player, 0))
+                        return ReturnYieldFrom(gamestate.end_game(player, 0))
+
+                # return False, 0
+                return Return((False, 0))
+
+        return KeeperPhaseState()
 
     def end_game(self, player: Player, reward: int) -> PlayOrDoneCoroutine:
         # yield PlayYield(
