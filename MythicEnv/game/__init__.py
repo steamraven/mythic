@@ -617,12 +617,10 @@ class MythicMischiefGame:
 
     def start_play(self) -> PlayOrDoneGenerator:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
+        gamestate = self
 
-        class PlayState(PlayOrDoneGeneratorImpl):
-            gamestate: MythicMischiefGame
-
+        class StartPlayState(PlayOrDoneGeneratorImpl):
             def send_impl(self, value: Optional[int]):
-                gamestate = self.gamestate
                 action = value
                 # players = self.players
                 players = gamestate.players
@@ -673,23 +671,15 @@ class MythicMischiefGame:
                             return YieldFrom(gamestate.cleanup_phase(player))
                 assert False
 
-        state = PlayState()
-        # Deepcopy will only copy once
-        state.gamestate = self
-        return state
+        return StartPlayState()
 
     def place_mythics(self, player: Player, anywhere: bool) -> PlayGenerator:
         """Place available mythics in spot in an available spot"""
+        gamestate = self
 
         class PlaceMythicsState(PlayGeneratorImpl):
-            gamestate: MythicMischiefGame
-            player: Player
-            anywhere: bool
 
             def send_impl(self, value: Optional[int]):
-                gamestate = self.gamestate
-                player = self.player
-                anywhere = self.anywhere
                 action = value
 
                 any_mask = PLAYER_MASK | KEEPER | BOOKS_MASK
@@ -698,13 +688,14 @@ class MythicMischiefGame:
                 if self.next_step():
                     # Init
                     assert Action is None
+                    state.anywhere = anywhere
                     self.complete_step()
 
                 # while len(player.mythics) < 3:
                 for _ in self.while_loop(lambda: len(player.mythics) < 3):
                     if self.next_step():
                         available = []  # to make typechecker happy
-                        if not anywhere:
+                        if not self.anywhere:
                             available = [
                                 respawn
                                 for respawn in gamestate.dest_card.respawn
@@ -712,8 +703,8 @@ class MythicMischiefGame:
                             ]
                             if len(available) == 0:
                                 # if we can't place now, we wont be able to anytime this call. Start searching anywhere
-                                anywhere = self.anywhere = True
-                        if anywhere:
+                                self.anywhere = True
+                        if self.anywhere:
                             available = [
                                 (x, y)
                                 for x in range(5)
@@ -739,23 +730,15 @@ class MythicMischiefGame:
 
                 return Return(None)
 
-        state = PlaceMythicsState()
-        state.gamestate = self
-        state.player = player
-        state.anywhere = anywhere
-        return state
+        return PlaceMythicsState()
 
     def spend_tomes(self, player: Player) -> PlayGenerator:
         """Spend all collected tomes on skills"""
+        gamestate = self
 
         class SpendTomesState(PlayGeneratorImpl):
-            gamestate: MythicMischiefGame
-            player: Player
-
             def send_impl(self, value: Optional[int]):
                 action = value
-                gamestate = self.gamestate
-                player = self.player
 
                 # Online game forces spend
 
@@ -812,22 +795,16 @@ class MythicMischiefGame:
                         gamestate.reset_skills(player)
                 return Return(None)
 
-        state = SpendTomesState()
-        state.gamestate = self
-        state.player = player
-        return state
+        return SpendTomesState()
 
     def mythic_phase(self, player: Player) -> PlayOrDoneGenerator:
         """Phase where actions are performed by the mythics"""
+        gamestate = self
 
         class MythicPhaseState(PlayOrDoneGeneratorImpl):
-            gamestate: MythicMischiefGame
-            player: Player
 
             def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
                 action = value
-                gamestate = self.gamestate
-                player = self.player
 
                 if self.next_step():
                     # init
@@ -898,10 +875,7 @@ class MythicMischiefGame:
                             return Return((done, reward))
                 assert False
 
-        state = MythicPhaseState()
-        state.gamestate = self
-        state.player = player
-        return state
+        return MythicPhaseState()
 
     # Does not really return Done, but needs PlayOrDoneCoroutine for parent code
     def play_move(
@@ -910,11 +884,9 @@ class MythicMischiefGame:
         """Play a move own mythic skill"""
 
         class PlayMoveState(PlayOrDoneGeneratorImpl):
-            player: Player
 
             def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
                 action = value
-                player = self.player
 
                 player_mask = PLAYER[player.id_]
                 other_player_mask = PLAYER[player.id_ ^ 1]
