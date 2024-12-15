@@ -1016,10 +1016,6 @@ class MythicMischiefGame:
                     #         # Make sure to reverse move
                     #         self.board[mythic] |= player_mask
 
-                    # This yield should return Action.Move,
-                    # but because of how this co-routine is called,
-                    # the first yield may return either None, or Action.MOVE,
-                    # Either way, we don't care
                     if any(v for v in self.available_moves.values()):
                         # yield PlayYield(
                         return Yield(
@@ -1044,6 +1040,11 @@ class MythicMischiefGame:
                         )
 
                 if self.next_step():
+                    # This previous ;oiud should return Action.MOVEF,
+                    # but because of how this co-routine is called,
+                    # the previous yield will return either None, or Action.MOVE
+                    assert action is None or action == Action.MOVE
+
                     # Select mythic to move from mythics that can move
                     # action = yield PlayYield(
                     return Yield(
@@ -1102,9 +1103,7 @@ class MythicMischiefGame:
 
                 return Return((False, 0))
 
-        state = PlayMoveState()
-        state.player = player
-        return state
+        return PlayMoveState()
 
     def play_distract(
         self, gamestate: "MythicMischiefGame", player: Player
