@@ -20,7 +20,7 @@ from MythicEnv.game import (
 from MythicEnv.game import (
     PlayOrDoneGenerator,
     PlayOrDoneGeneratorImpl,
-    PlayOrDoneGeneratorImpl_Return,
+    PlayOrDone_SendImpl_Return,
     Yield,
     Return,
 )
@@ -55,7 +55,7 @@ class Vampire(Team):
         # unobstructed distance. See pg. 21.
         # • You can Lure onto a Cluttered space.
         class PlayMoveOtherState(PlayOrDoneGeneratorImpl):
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
                 other_player = game.players[player.id_ ^ 1]
                 if self.next_step():
@@ -157,7 +157,7 @@ class Vampire(Team):
         # • You cannot place a Bookshelf onto the outer
         # edge of the Library or another Bookshelf.
         class PlayMoveShelfState(PlayOrDoneGeneratorImpl):
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
                 wall_type = HORZ_WALL if horz else VERT_WALL
                 o_wall_type = VERT_WALL if horz else HORZ_WALL

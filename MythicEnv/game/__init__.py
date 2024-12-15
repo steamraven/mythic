@@ -187,12 +187,6 @@ class Player:
     occupying: Coordinate | None
 
 
-# Type alias for Play sub-functions
-# Play Coroutine that does not end game
-PlayCoroutine = Generator[PlayYield, int, None]
-# Play Coroutine that can end game
-PlayOrDoneCoroutine = Generator[PlayYield, int, tuple[bool, int]]
-
 T_Yield = TypeVar("T_Yield")
 T_Return = TypeVar("T_Return")
 T_Send = TypeVar("T_Send")
@@ -517,11 +511,11 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
 
 
 PlayGenerator = ClonableGenerator[PlayYield, int, None]
-PlayGenerator_Return = Yield[PlayYield] | Return[None]
+Play_Send_Return = Yield[PlayYield] | Return[None]
 PlayOrDoneGenerator = ClonableGenerator[PlayYield, int, tuple[bool, int]]
-PlayOrDoneGenerator_Return = Yield[PlayYield] | Return[tuple[bool, int]]
+PlayOrDone_Send_Return = Yield[PlayYield] | Return[tuple[bool, int]]
 PlayGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, None]
-PlayGeneratorImpl_Return = (
+Play_SendImpl_Return = (
     Yield[PlayYield]
     | Return[None]
     | YieldFrom[PlayYield, int, Any]
@@ -529,7 +523,7 @@ PlayGeneratorImpl_Return = (
     | Break
 )
 PlayOrDoneGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, tuple[bool, int]]
-PlayOrDoneGeneratorImpl_Return = (
+PlayOrDone_SendImpl_Return = (
     Yield[PlayYield]
     | Return[tuple[bool, int]]
     | YieldFrom[PlayYield, int, Any]
@@ -537,9 +531,7 @@ PlayOrDoneGeneratorImpl_Return = (
     | Break
 )
 
-PlaySkill = Callable[
-    ["MythicMischiefGame", Player], PlayOrDoneGenerator
-]
+PlaySkill = Callable[["MythicMischiefGame", Player], PlayOrDoneGenerator]
 
 
 class Team(abc.ABC):
@@ -805,7 +797,7 @@ class MythicMischiefGame:
 
         class MythicPhaseState(PlayOrDoneGeneratorImpl):
 
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
 
                 if self.next_step():
@@ -835,9 +827,7 @@ class MythicMischiefGame:
                     if self.next_step():
                         # if not player.occupying:
                         available: list[int] = [Action.PASS]
-                        self.skill_coroutines = dict[
-                            int, PlayOrDoneGenerator
-                        ]()
+                        self.skill_coroutines = dict[int, PlayOrDoneGenerator]()
                         for skill in gamestate.player_skills[player.id_]:
                             coroutine = skill(gamestate, player)
                             y_or_d = coroutine.send(None)
@@ -884,7 +874,7 @@ class MythicMischiefGame:
 
         class PlayMoveState(PlayOrDoneGeneratorImpl):
 
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
 
                 player_mask = PLAYER[player.id_]
@@ -1094,7 +1084,7 @@ class MythicMischiefGame:
 
         class PlayDistractState(PlayOrDoneGeneratorImpl):
 
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
 
                 if self.next_step():
@@ -1183,7 +1173,7 @@ class MythicMischiefGame:
         gamestate = self
 
         class KeeperPhaseState(PlayOrDoneGeneratorImpl):
-            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> PlayOrDone_SendImpl_Return:
                 action = value
                 if self.next_step():
                     self.keeper_moves = gamestate.dest_card.keeper_moves
@@ -1284,7 +1274,7 @@ class MythicMischiefGame:
         gamestate = self
 
         class CleanupPhaseState(PlayGeneratorImpl):
-            def send_impl(self, value: int | None) -> PlayGeneratorImpl_Return:
+            def send_impl(self, value: int | None) -> Play_SendImpl_Return:
                 action = value
 
                 if self.next_step():
