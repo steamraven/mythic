@@ -1265,12 +1265,17 @@ class MythicMischiefGame:
 
         return KeeperPhaseState()
 
-    def end_game(self, player: Player, reward: int) -> PlayOrDoneCoroutine:
+    def end_game(self, player: Player, reward: int) -> PlayOrDoneGenerator:
         # yield PlayYield(
         #    player.id_, ActionPhase.END_GAME, 1, ActionType.PASS, [Action.PASS]
         # )
-        return True, reward
-        yield
+        class EndGameState(PlayOrDoneGenerator):
+            def send(
+                self, value: int | None
+            ) -> Yield[PlayYield] | Return[tuple[bool, int]]:
+                return Return((True, reward))
+
+        return EndGameState()
 
     def cleanup_phase(self, player: Player) -> PlayCoroutine:
         """Cleanup and reset skills, spend tomes and boosts"""
