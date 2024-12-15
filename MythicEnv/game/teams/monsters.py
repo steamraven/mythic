@@ -90,6 +90,7 @@ class Monster(Team):
                                             available[opp] = over
 
                     if any(v for v in self.available_moves.values()):
+                        # yield PlayYield(
                         return Yield(
                             PlayYield(
                                 player.id_,
@@ -100,6 +101,7 @@ class Monster(Team):
                             )
                         )
                     else:
+                        # yield PlayYield(
                         return Yield(
                             PlayYield(
                                 player.id_,
@@ -114,6 +116,8 @@ class Monster(Team):
                     # but because of how this co-routine is called,
                     # the previous yield will return None,
                     assert action is None or action == Action.MOVE_OTHER
+
+                    # action = yield PlayYield(
                     return Yield(
                         PlayYield(
                             player.id_,
@@ -129,9 +133,9 @@ class Monster(Team):
                     )
                 if self.next_step():
                     assert action is not None
-
                     self.mythic = action_to_board(action)
 
+                    # action = yield PlayYield(
                     return Yield(
                         PlayYield(
                             player.id_,
@@ -221,6 +225,7 @@ class Monster(Team):
                         src.wall_type == wall_type
                         for src in self.available_moves.keys()
                     ):
+                        # yield PlayYield(
                         return Yield(
                             PlayYield(
                                 player.id_,
@@ -237,6 +242,7 @@ class Monster(Team):
                             )
                         )
                     else:
+                        # yield PlayYield(
                         return Yield(
                             PlayYield(
                                 player.id_,
@@ -253,6 +259,8 @@ class Monster(Team):
                     assert action is None or action == (
                         Action.MOVE_HORZ_SHELF if horz else Action.MOVE_VERT_SHELF
                     )
+
+                    # action = yield PlayYield(
                     return Yield(
                         PlayYield(
                             player.id_,
@@ -277,6 +285,7 @@ class Monster(Team):
                     assert action is not None
                     self.src = Wall(wall_type, action_to_board(action))
 
+                    # actin = yield PlayYield(
                     return Yield(
                         PlayYield(
                             player.id_,
