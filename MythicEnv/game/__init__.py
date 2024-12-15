@@ -1277,47 +1277,71 @@ class MythicMischiefGame:
 
         return EndGameState()
 
-    def cleanup_phase(self, player: Player) -> PlayCoroutine:
+    def cleanup_phase(self, player: Player) -> PlayGenerator:
         """Cleanup and reset skills, spend tomes and boosts"""
-        yield from self.spend_tomes(player).as_generator()
+        gamestate = self
 
-        # boosts
-        boosts = [0, 0, 0, 0]
-        for i in [2, 1]:
+        class CleanupPhaseState(PlayGeneratorImpl):
+            def send_impl(self, value: int | None) -> PlayGeneratorImpl_Return:
+                action = value
 
-            available = list[int]()
-            if player.move < 9:
-                available.append(Action.MOVE)
-            if player.move_other < 3:
-                available.append(Action.MOVE_OTHER)
-            if player.move_shelf < 3:
-                available.append(Action.MOVE_HORZ_SHELF)
-                available.append(Action.MOVE_VERT_SHELF)
-            if player.distract < 3:
-                available.append(Action.DISTRACT)
-            action = yield PlayYield(
-                player.id_, ActionPhase.BOOST, i, ActionType.SELECT_SKILL, available
-            )
-            if action == Action.MOVE:
-                boosts[0] += 1
-                player.move = player.team.data.move_skill_costs[
-                    player.move_tomes * 2 + boosts[0]
-                ]
-            elif action == Action.MOVE_OTHER:
-                boosts[1] += 1
-                player.move_other = player.team.data.move_other_skill_costs[
-                    player.move_other_tomes + boosts[1]
-                ]
-            elif action == Action.MOVE_HORZ_SHELF or action == Action.MOVE_VERT_SHELF:
-                boosts[2] += 1
-                player.move_shelf = player.team.data.move_shelf_skill_costs[
-                    player.move_shelf_tomes + boosts[2]
-                ]
-            elif action == Action.DISTRACT:
-                boosts[3] += 1
-                player.distract = player.team.data.distract_skill_costs[
-                    player.distract_tomes + boosts[3]
-                ]
+                if self.next_step():
+                    # yield from self.spend_tomes(player).as_generator()
+                    return YieldFrom(gamestate.spend_tomes(player))
+                if self.next_step():
+                    # boosts
+                    self.boosts = [0, 0, 0, 0]
+
+                for i in self.for_loop([2, 1]):
+                    if self.next_step():
+                        available = list[int]()
+                        if player.move < 9:
+                            available.append(Action.MOVE)
+                        if player.move_other < 3:
+                            available.append(Action.MOVE_OTHER)
+                        if player.move_shelf < 3:
+                            available.append(Action.MOVE_HORZ_SHELF)
+                            available.append(Action.MOVE_VERT_SHELF)
+                        if player.distract < 3:
+                            available.append(Action.DISTRACT)
+                        # action = yield PlayYield(
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.BOOST,
+                                i,
+                                ActionType.SELECT_SKILL,
+                                available,
+                            )
+                        )
+                    if self.next_step():
+                        assert action is not None
+                        if action == Action.MOVE:
+                            self.boosts[0] += 1
+                            player.move = player.team.data.move_skill_costs[
+                                player.move_tomes * 2 + self.boosts[0]
+                            ]
+                        elif action == Action.MOVE_OTHER:
+                            self.boosts[1] += 1
+                            player.move_other = player.team.data.move_other_skill_costs[
+                                player.move_other_tomes + self.boosts[1]
+                            ]
+                        elif (
+                            action == Action.MOVE_HORZ_SHELF
+                            or action == Action.MOVE_VERT_SHELF
+                        ):
+                            self.boosts[2] += 1
+                            player.move_shelf = player.team.data.move_shelf_skill_costs[
+                                player.move_shelf_tomes + self.boosts[2]
+                            ]
+                        elif action == Action.DISTRACT:
+                            self.boosts[3] += 1
+                            player.distract = player.team.data.distract_skill_costs[
+                                player.distract_tomes + self.boosts[3]
+                            ]
+                return Return(None)
+
+        return CleanupPhaseState()
 
     def reset_skills(self, player: Player):
         """Reset all skills based on spent tomes"""
