@@ -246,6 +246,12 @@ class YieldFrom(Generic[T_Yield, T_Send, T_Return]):
     )
 
 
+class ReturnYieldFrom(
+    Generic[T_Yield, T_Send, T_Return], YieldFrom[T_Yield, T_Send, T_Return]
+):
+    pass
+
+
 class LoopState:
     end_step: Optional[int] = None
 
@@ -319,8 +325,13 @@ class ClonableGeneratorImpl(ClonableGenerator[T_Yield, T_Send, T_Return]):
                     except StopIteration as e:
                         self.yield_from_result = e.value
                 self.complete_step()
+                yf = self._yield_from
                 self._yield_from = None
                 value = None
+                if isinstance(yf, ReturnYieldFrom):
+                    yfr = self.yield_from_result
+                    self.yield_from_result = None
+                    return Return(yfr)
 
     def next_step(self, custom_step: Optional[int] = None) -> bool:
         "Check step condition"
