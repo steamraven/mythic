@@ -1109,57 +1109,92 @@ class MythicMischiefGame:
         self, gamestate: "MythicMischiefGame", player: Player
     ) -> PlayOrDoneGenerator:
         """Play a distract skill"""
-        available_moves = dict[Coordinate, list[int]]()
-        # TODO: don't need to select mythic
-        if player.distract:
-            for mythic in player.mythics:
-                dest_costs = self.calc_dest_costs(mythic)
-                available = list[int]()
-                best_cost = 255
 
-                # Distract takes into account clutter for pathfinding (see calc_dest_costs)
-                # But clutter not counted for the move. 
-                # i.e. can be distrated onto clutter
-                for n in self.get_neighbors(self.keeper):
-                    n_cost = dest_costs[n]
-                    if n_cost < best_cost:
-                        available.clear()
-                        best_cost = n_cost
-                    if n_cost == best_cost:
-                        available.append(board_to_action(*n))
+        class PlayDistractState(PlayOrDoneGeneratorImpl):
 
-                available_moves[mythic] = available
+            def send_impl(self, value: int | None) -> PlayOrDoneGeneratorImpl_Return:
+                action = value
 
-        # This yield shoud retorn Action.DISTRACT,
-        # but because of how this co-routine is called,
-        # the first yield will return None,
-        if any(v for v in available_moves.values()):
-            yield PlayYield(
-                player.id_,
-                ActionPhase.USE_SKILL,
-                1,
-                ActionType.SELECT_SKILL,
-                [Action.DISTRACT],
-            )
-        else:
-            yield PlayYield(
-                player.id_, ActionPhase.USE_SKILL, 1, ActionType.SELECT_SKILL, []
-            )
+                if self.next_step():
+                    self.available_moves = dict[Coordinate, list[int]]()
+                    self.complete_step()
+                if self.next_step():
+                    # TODO: don't need to select mythic
+                    if player.distract:
+                        for mythic in player.mythics:
+                            dest_costs = gamestate.calc_dest_costs(mythic)
+                            available = list[int]()
+                            best_cost = 255
 
-        action = yield PlayYield(
-            player.id_,
-            ActionPhase.DISTRACT,
-            1,
-            ActionType.SELECT_DEST,
-            [board_to_action(*k) for k, v in available_moves.items() if v],
-        )
-        player.distract -= 1
-        dest = action_to_board(action)
-        done = self.move_keeper(dest)
-        if done:
-            return (yield from self.end_game(player, 1))
+                            # Distract takes into account clutter for pathfinding (see calc_dest_costs)
+                            # But clutter not counted for the move.
+                            # i.e. can be distrated onto clutter
+                            for n in gamestate.get_neighbors(gamestate.keeper):
+                                n_cost = dest_costs[n]
+                                if n_cost < best_cost:
+                                    available.clear()
+                                    best_cost = n_cost
+                                if n_cost == best_cost:
+                                    available.append(board_to_action(*n))
 
-        return False, 0
+                            self.available_moves[mythic] = available
+
+                    # This yield shoud retorn Action.DISTRACT,
+                    # but because of how this co-routine is called,
+                    # the first yield will return None,
+                    if any(v for v in self.available_moves.values()):
+                        # yield PlayYield(
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.USE_SKILL,
+                                1,
+                                ActionType.SELECT_SKILL,
+                                [Action.DISTRACT],
+                            )
+                        )
+                    else:
+                        # yield PlayYield(
+                        return Yield(
+                            PlayYield(
+                                player.id_,
+                                ActionPhase.USE_SKILL,
+                                1,
+                                ActionType.SELECT_SKILL,
+                                [],
+                            )
+                        )
+                if self.next_step():
+                    # The previous yield shoud retorn Action.DISTRACT,
+                    # but because of how this co-routine is called,
+                    # the the previous yield will return None,
+                    assert action is None or action == Action.DISTRACT
+
+                    # action = yield PlayYield(
+                    return Yield(
+                        PlayYield(
+                            player.id_,
+                            ActionPhase.DISTRACT,
+                            1,
+                            ActionType.SELECT_DEST,
+                            [
+                                board_to_action(*k)
+                                for k, v in self.available_moves.items()
+                                if v
+                            ],
+                        )
+                    )
+                if self.next_step():
+                    assert action is not None
+                    player.distract -= 1
+                    dest = action_to_board(action)
+                    done = gamestate.move_keeper(dest)
+                    if done:
+                        #  return (yield from self.end_game(player, 1))
+                        return ReturnYieldFrom(gamestate.end_game(player, 1))
+                return Return((False, 0))
+
+        return PlayDistractState()
 
     def keeper_phase(self, player: Player) -> PlayOrDoneCoroutine:
         """Move Keeper"""
