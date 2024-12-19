@@ -155,6 +155,7 @@ class Monster(Team):
                     # move opponent mythic
                     dest = self.available_moves[self.mythic][opp]
                     game.move_mythic(other_player, opp, dest)
+                    self.complete_step()
 
                 return Return((False, 0))
 
@@ -312,6 +313,7 @@ class Monster(Team):
                     dest = Wall(o_wall_type, action_to_board(action))
 
                     game.move_wall(self.src, dest)
+                    self.complete_step()
 
                 return Return((False, 0))
 

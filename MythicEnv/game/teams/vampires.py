@@ -142,6 +142,7 @@ class Vampire(Team):
                     direction = self.available_dict[self.mythic][opp]
                     dest = (opp[0] - direction[0], opp[1] - direction[1])
                     game.move_mythic(other_player, opp, dest)
+                    self.complete_step()
 
                 return Return((False, 0))
 
@@ -283,6 +284,7 @@ class Vampire(Team):
                     dest = Wall(o_wall_type, action_to_board(action))
 
                     game.move_wall(self.src, dest)
+                    self.complete_step()
 
                 return Return((False, 0))
 
