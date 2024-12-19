@@ -34,6 +34,15 @@ def prompt(to_play: int, buffer: str, confirmed: bool, meta: dict[str, Any]):
     return f"{action_phase}{action_type} for Player {to_play}{player_name}: {buffer}{'   (Enter to play)' if confirmed else ''}"
 
 
+def save_recording(recording: list[str]):
+    with open("recording.txt", "w") as f:
+        f.writelines([l + "\n" for l in recording])
+
+def load_script() -> list[str]:
+    with open("script.txt") as f:
+        return [l.strip() for l in f if l.strip()]
+
+
 def play_env(env: PlayableEnv[ActType, ObsType], seed: Optional[int] = None):
     """Play a game"""
     if seed is not None:
@@ -86,37 +95,8 @@ def play_env(env: PlayableEnv[ActType, ObsType], seed: Optional[int] = None):
     random.seed(1)
     script = []
     if True:
-        script = [
-            "random",  #"2,0",  # place Mythic 1
-            "random",  #"1,1",  # place mythic 2
-            "random", #"3,1",  # place mythic 3
-            "1",  # start tome in move
-            "random", # "2,1",  # place mythic 1
-            "random", # "3,0",  # place mythic 2
-            "random", # "0,0",  # place mythic 3
-            "1", # Move
-            "0,4",  # From here
-            "1,4",  # To Here
-            "3", # Move Wall
-            "1,3", # from here
-            "1,4", # To here
-            "2", # move other
-            "1,4",  # select self mythic
-            "1,1", # select opp mythic
-            
-            
-
-        ]
-        x = [  # type: ignore
-            "0",  # pass
-            "2,1",  # move keeper
-            "2,0",  # move keeper
-            "1,0",  # move keeper
-            "1",  # boost move
-            "1",  # boost move
-            "1,3"
-        ]
-
+        script = load_script()
+    recording = list[str]()
     while running:
         curr_prompt = prompt(to_play, buffer, confirmed, meta)
         if done:
@@ -146,6 +126,8 @@ def play_env(env: PlayableEnv[ActType, ObsType], seed: Optional[int] = None):
             # Execute pending actions
             if action is not None:
                 # prev_obs = obs
+                recording.append(env.action_names[action])
+                save_recording(recording)
                 obs, _, done, meta = env.step(action)
                 assert done or obs is not None
                 to_play = cast(int, obs["to_play"])
