@@ -361,8 +361,8 @@ class MythicMischiefGame:
 
                 if self.next_step():
                     # Init
-                    assert Action is None
-                    state.anywhere = anywhere
+                    assert action is None
+                    self.anywhere = anywhere
                     self.complete_step()
 
                 # while len(player.mythics) < 3:
@@ -1113,7 +1113,7 @@ class MythicMischiefGame:
     #         best_cost = inner(x - 1, y, best_cost)
     #     return best_cost
 
-    def get_neighbors(self, pos: Coordinate) -> Generator[Coordinate]:
+    def get_neighbors(self, pos: Coordinate) -> Generator[Coordinate, None, None]:
         x, y = pos
         if y < 4 and not (self.board[x, y] & HORZ_WALL):
             yield x, y + 1
