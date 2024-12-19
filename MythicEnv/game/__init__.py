@@ -519,7 +519,6 @@ Play_SendImpl_Return = (
     Yield[PlayYield]
     | Return[None]
     | YieldFrom[PlayYield, int, Any]
-    | Generator[PlayYield, int, Any]
     | Break
 )
 PlayOrDoneGeneratorImpl = ClonableGeneratorImpl[PlayYield, int, tuple[bool, int]]
@@ -527,7 +526,6 @@ PlayOrDone_SendImpl_Return = (
     Yield[PlayYield]
     | Return[tuple[bool, int]]
     | YieldFrom[PlayYield, int, Any]
-    | Generator[PlayYield, int, Any]
     | Break
 )
 
