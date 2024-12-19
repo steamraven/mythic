@@ -139,6 +139,7 @@ class Vampire(Team):
 
                     # move opponent mythic
                     player.move_other -= 1
+                    assert player.move_other >= 0
                     direction = self.available_dict[self.mythic][opp]
                     dest = (opp[0] - direction[0], opp[1] - direction[1])
                     game.move_mythic(other_player, opp, dest)
@@ -281,6 +282,7 @@ class Vampire(Team):
                 if self.next_step():
                     assert action is not None
                     player.move_shelf -= 1
+                    assert player.move_shelf >= 0
                     dest = Wall(o_wall_type, action_to_board(action))
 
                     game.move_wall(self.src, dest)

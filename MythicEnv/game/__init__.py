@@ -747,6 +747,7 @@ class MythicMischiefGame:
                         cost = 1
 
                     player.move -= cost
+                    assert player.move >= 0
 
                     # Check for mythic occupying space of another
                     player.occupying = (
@@ -842,6 +843,7 @@ class MythicMischiefGame:
                 if self.next_step():
                     assert action is not None
                     player.distract -= 1
+                    assert player.distract >= 0
                     dest = action_to_board(action)
                     done = gamestate.move_keeper(dest)
                     if done:
@@ -915,6 +917,7 @@ class MythicMischiefGame:
                             self.keeper_moves -= 2
                         else:
                             self.keeper_moves -= 1
+                        assert self.keeper_moves >= 0
                         self.complete_step()
 
                 if self.next_step():

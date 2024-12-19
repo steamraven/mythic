@@ -151,6 +151,7 @@ class Monster(Team):
                 if self.next_step():
                     assert action is not None
                     player.move_other -= 1
+                    assert player.move_other >= 0
                     opp = action_to_board(action)
                     # move opponent mythic
                     dest = self.available_moves[self.mythic][opp]
@@ -310,6 +311,7 @@ class Monster(Team):
                 if self.next_step():
                     assert action is not None
                     player.move_shelf -= 1
+                    assert player.move_shelf >= 0
                     dest = Wall(o_wall_type, action_to_board(action))
 
                     game.move_wall(self.src, dest)
