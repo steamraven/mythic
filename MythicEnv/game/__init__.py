@@ -719,7 +719,7 @@ class MythicMischiefGame:
                         pos = action_to_board(action)
                         gamestate.board[pos] |= PLAYER[player.id_]
                         player.mythics.add(pos)
-
+                        self.complete_step()
                 return Return(None)
 
         return PlaceMythicsState()
@@ -785,6 +785,7 @@ class MythicMischiefGame:
                             player.legendary = 1
                         # TODO: Is this needed maybe move out
                         gamestate.reset_skills(player)
+                        self.complete_step()
                 return Return(None)
 
         return SpendTomesState()
@@ -820,6 +821,7 @@ class MythicMischiefGame:
                         if done:
                             return Return((done, reward))
                         # Try more actions
+                        self.complete_step()
                         continue
 
                     if self.next_step():
@@ -860,6 +862,7 @@ class MythicMischiefGame:
                         if done:
                             # return done, reward
                             return Return((done, reward))
+                        self.complete_step()
                 assert False
 
         return MythicPhaseState()
@@ -1162,6 +1165,7 @@ class MythicMischiefGame:
                     if done:
                         #  return (yield from self.end_game(player, 1))
                         return ReturnYieldFrom(gamestate.end_game(player, 1))
+                    self.complete_step()
                 return Return((False, 0))
 
         return PlayDistractState()
@@ -1229,6 +1233,7 @@ class MythicMischiefGame:
                             self.keeper_moves -= 2
                         else:
                             self.keeper_moves -= 1
+                        self.complete_step()
 
                 if self.next_step():
                     # switch lunch or end game
@@ -1249,6 +1254,7 @@ class MythicMischiefGame:
 
                         # return (yield from self.end_game(player, 0))
                         return ReturnYieldFrom(gamestate.end_game(player, 0))
+                    self.complete_step()
 
                 # return False, 0
                 return Return((False, 0))
@@ -1281,6 +1287,7 @@ class MythicMischiefGame:
                 if self.next_step():
                     # boosts
                     self.boosts = [0, 0, 0, 0]
+                    self.complete_step()
 
                 for i in self.for_loop([2, 1]):
                     if self.next_step():
