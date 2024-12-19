@@ -569,48 +569,30 @@ class MythicMischiefGame:
 
                 if self.next_step():
 
+                    # this is a full function as we may need to recurse
                     def find_available_moves(
                         pos: Coordinate, remaining: int
                     ) -> list[tuple[Coordinate, int]]:
                         available = list[tuple[Coordinate, int]]()
 
-                        # def inner(x: int, y: int, _: int):
-                        #     """Add space to available if reachable.  May recurse for occupied spots"""
-                        #     if self.board[x, y] & not_available_mask:
-                        #         return 0
-                        #     cost = 2 if self.board[x, y] & CLUTTER else 1
-
-                        #     # If the destination has another player, make sure there is an exit
-                        #     if self.board[x, y] & other_player_mask:
-                        #         if remaining > cost:
-                        #             next_moves = find_available_moves((x, y), remaining - cost)
-                        #             if next_moves:
-                        #                 cost += min(a[1] for a in next_moves)
-                        #                 available.append(((x, y), cost))
-                        #         return 0
-
-                        #     if remaining >= cost:
-                        #         available.append(((x, y), cost))
-                        #     return 0
-
                         for n in gamestate.get_neighbors(pos):
+                            # check if the spot is available
                             if gamestate.board[n] & not_available_mask:
                                 continue
-                            cost = 2 if gamestate.board[pos] & CLUTTER else 1
+                            cost = 2 if gamestate.board[n] & CLUTTER else 1
+                            # check if there is anothes player
                             if gamestate.board[n] & other_player_mask:
                                 if remaining > cost:
+                                    # Add extra cost for moving off of this space
                                     next_moves = find_available_moves(
                                         n, remaining - cost
                                     )
-                                    if next_moves:
-                                        cost += min(a[1] for a in next_moves)
-                                        available.append((n, cost))
-                                continue
-
+                                    if not next_moves:
+                                        # no available moves off of this stop:
+                                        continue
+                                    cost += min(a[1] for a in next_moves)
                             if remaining >= cost:
                                 available.append((n, cost))
-
-                        # self.check_neighbors(pos, inner, 0)
                         return available
 
                     self.available_moves = dict[
