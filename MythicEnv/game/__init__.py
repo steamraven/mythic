@@ -695,7 +695,7 @@ class MythicMischiefGame:
                         )
 
                 if self.next_step():
-                    # This previous ;oiud should return Action.MOVEF,
+                    # The previous yield should return Action.MOVE,
                     # but because of how this co-routine is called,
                     # the previous yield will return either None, or Action.MOVE
                     assert action is None or action == Action.MOVE
