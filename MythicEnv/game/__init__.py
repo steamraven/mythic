@@ -247,6 +247,7 @@ class MythicMischiefGame:
     dest_card: DestCard
     start_layout: StartLayout
     dests: list[Coordinate]
+    done: Optional[int]
 
     def __init__(self, player_teams: tuple[type[Team], type[Team]]):
         self.board = np.zeros((5, 5), np.uint16)
@@ -289,6 +290,8 @@ class MythicMischiefGame:
         # second player gets an extra tome to start
         self.players[1].tomes += 1
 
+        self.done = None
+
     def start_play(self) -> PlayOrDoneGenerator:
         """Play generator. Takes action, yield next available actions, and returns reward when done"""
         gamestate = self
@@ -298,6 +301,7 @@ class MythicMischiefGame:
                 action = value
                 # players = self.players
                 players = gamestate.players
+                assert gamestate.done is None
 
                 if self.next_step():
                     # init
@@ -330,6 +334,7 @@ class MythicMischiefGame:
                         if self.next_step():
                             done, reward = self.yield_from_result
                             if done:
+                                gamestate.done = reward if player.id_ == 0 else -1 * reward
                                 # return done, reward
                                 return Return((done, reward))
                             assert not player.occupying
@@ -338,6 +343,7 @@ class MythicMischiefGame:
                         if self.next_step():
                             done, reward = self.yield_from_result
                             if done:
+                                gamestate.done = reward if player.id_ == 0 else -1 * reward
                                 # return done, reward
                                 return Return((done, reward))
 
@@ -501,6 +507,7 @@ class MythicMischiefGame:
                     if self.next_step():
                         done, reward = self.yield_from_result
                         if done:
+                            self.done = reward
                             return Return((done, reward))
                         # Try more actions
                         self.complete_step()
@@ -542,6 +549,7 @@ class MythicMischiefGame:
                     if self.next_step():
                         done, reward = self.yield_from_result
                         if done:
+                            self.done = reward
                             # return done, reward
                             return Return((done, reward))
                         self.complete_step()
