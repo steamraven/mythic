@@ -1,18 +1,45 @@
 import abc
 import random
-from typing import Any, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, TypedDict, cast, Generic
 
 from ding.envs.env.base_env import BaseEnv
 import pygame
 import pygame.freetype
-import gym
+import gymnasium.spaces
+import numpy as np
 
 from MythicEnv.renderable import Text, RenderableEnv, Flex, Box, BLACK, toggle_blink
 
-ObsType = TypeVar("ObsType")
+ObsType = TypeVar("ObsType", bound=np.generic)
 ActType = TypeVar("ActType")
 
-class PlayableEnv( BaseEnv[ObsType, ActType] ):
+
+# BaseEnv is not actually a generic, but its parent gym.Env is.
+# BaseEnv is declared generic in the typing data
+# This is hack to get around this and keep typing info, without changing ding
+
+if TYPE_CHECKING:
+    class _BaseEnv(BaseEnv[ObsType, ActType]):
+       pass
+else:
+    class _BaseEnv(BaseEnv, Generic[ObsType, ActType]):
+        pass
+
+class ObservationDict( TypedDict, Generic[ObsType]):
+    observation: np.ndarray[tuple[int,int,int], np.dtype[ObsType]]
+    action_mask: np.ndarray[tuple[int], np.dtype[np.uint8]]
+    to_play: int
+
+class ObservationSpaceDictInit(TypedDict, Generic[ObsType]):
+    observation: gymnasium.Space[ObsType]
+    action_mask: gymnasium.Space[np.uint8]
+    to_play: gymnasium.Space[np.uint64]
+
+    
+class ObservationSpaceDict(gymnasium.spaces.Dict):
+    pass
+
+class PlayableEnv( _BaseEnv[ObsType, ActType] ):
     """An env that can be played"""
 
     action_names: list[str]
