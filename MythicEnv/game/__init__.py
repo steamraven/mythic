@@ -590,15 +590,16 @@ class MythicMischiefGame:
                             cost = 2 if gamestate.board[n] & CLUTTER else 1
                             # check if there is anothes player
                             if gamestate.board[n] & other_player_mask:
-                                if remaining > cost:
-                                    # Add extra cost for moving off of this space
-                                    next_moves = find_available_moves(
-                                        n, remaining - cost
-                                    )
-                                    if not next_moves:
-                                        # no available moves off of this stop:
-                                        continue
-                                    cost += min(a[1] for a in next_moves)
+                                if remaining <= cost:
+                                    continue
+                                # Add extra cost for moving off of this space
+                                next_moves = find_available_moves(
+                                    n, remaining - cost
+                                )
+                                if not next_moves:
+                                    # no available moves off of this stop:
+                                    continue
+                                cost += min(a[1] for a in next_moves)
                             if remaining >= cost:
                                 available.append((n, cost))
                         return available
