@@ -41,7 +41,7 @@ mythic_muzero_config = dict(
         cuda=False,
         env_type='board_games',
         action_type='varied_action_space',
-        game_segment_length=int(5 * 5),  # for battle_mode='self_play_mode'
+        game_segment_length=int(5 * 5*4),  # for battle_mode='self_play_mode'
         update_per_collect=update_per_collect,
         batch_size=batch_size,
         optim_type='Adam',
