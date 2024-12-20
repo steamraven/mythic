@@ -40,7 +40,7 @@ def save_recording(recording: list[str]):
 
 def load_script() -> list[str]:
     with open("script.txt") as f:
-        return [l.strip() for l in f if l.strip()]
+        return [l.strip() for l in f if l.strip() and not l.strip().startswith("#")]
 
 
 def play_env(env: PlayableEnv[ActType, ObsType], seed: Optional[int] = None):
