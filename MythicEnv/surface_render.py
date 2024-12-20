@@ -133,14 +133,14 @@ class MythicMischiefRenderable(Renderable):
             "Override Grid for specific logic"
 
             def cell_bg(self, x: int, y: int):
-                assert game.available_action_type is not None
-                if game.available_action_type in cell_action_types:
+                assert game.last_return.action_type is not None
+                if game.last_return.action_type in cell_action_types:
                     if (
                         game.confirming_action
                         and board_to_action(x, y) == game.confirming_action
                     ):
                         return GREEN
-                    if board_to_action(x, y) in game.available_actions:
+                    if board_to_action(x, y) in game.last_return.available_actions:
                         return GRAY
                 return BLACK
 
@@ -148,8 +148,8 @@ class MythicMischiefRenderable(Renderable):
                 # Render walls as borders
                 assert game.game_state
                 data: np.uint16 = game.game_state.board[x, y]
-                assert game.available_action_type is not None
-                action_type = game.available_action_type
+                assert game.last_return.action_type is not None
+                action_type = game.last_return.action_type
 
                 available_color = BLUE if get_blink() else GRAY
 
@@ -160,7 +160,7 @@ class MythicMischiefRenderable(Renderable):
                     horz_border = BorderProps(GREEN, 3)
                 elif (
                     action_type == ActionType.SELECT_HORZ_WALL
-                    and board_to_action(x, y) in game.available_actions
+                    and board_to_action(x, y) in game.last_return.available_actions
                 ):
                     horz_border = BorderProps(available_color, 5)
                 elif data & HORZ_WALL:
@@ -174,7 +174,7 @@ class MythicMischiefRenderable(Renderable):
                     vert_border = BorderProps(GREEN, 3)
                 elif (
                     action_type == ActionType.SELECT_VERT_WALL
-                    and board_to_action(x, y) in game.available_actions
+                    and board_to_action(x, y) in game.last_return.available_actions
                 ):
                     vert_border = BorderProps(available_color, 5)
                 elif data & VERT_WALL:
@@ -370,18 +370,18 @@ class MythicMischiefRenderable(Renderable):
                 return getter(player)
 
             def bg(self) -> tuple[int, int, int]:
-                assert game.available_action_type is not None
+                assert game.last_return.action_type is not None
                 if (
                     action is not None
-                    and game.to_play == player_id
+                    and game.last_return.to_play == player_id
                     and (
-                        game.available_action_type
+                        game.last_return.action_type
                         in [ActionType.SELECT_SKILL, ActionType.PASS]
                     )
                 ):
                     if action == game.confirming_action:
                         return GREEN
-                    elif action in game.available_actions:
+                    elif action in game.last_return.available_actions:
                         return GRAY
                 return BLACK
 
