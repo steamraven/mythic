@@ -1,5 +1,4 @@
 from easydict import EasyDict
-from .game import Action
 # ==============================================================
 # begin of the most frequently changed config specified by the user
 # ==============================================================
@@ -19,7 +18,7 @@ mythic_muzero_config = dict(
     exp_name=f'data_muzero/mythic_self-play-mode_seed0',
     env=dict(
         battle_mode='self_play_mode',
-        bot_action_type='rule',
+        bot_action_type='mcts',
         channel_last=False,
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
