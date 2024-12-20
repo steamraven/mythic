@@ -28,8 +28,8 @@ mythic_muzero_config = dict(
     ),
     policy=dict(
         model=dict(
-            observation_shape=(23, 5, 5),
-            action_space_size=len(Action) + 5*5,
+            observation_shape=(21, 5, 5),
+            action_space_size=33,
             image_channel=3,
             num_res_blocks=1,
             num_channels=64,
